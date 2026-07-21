@@ -1,0 +1,28 @@
+{
+  "name": "dublin-bus-live-board",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npx netlify-cli@26.2.0 dev",
+    "dev:vite": "vite",
+    "update:gtfs": "node scripts/build-gtfs-index.mjs",
+    "build": "npm run update:gtfs && vite build",
+    "build:demo": "SKIP_GTFS_DOWNLOAD=true vite build",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "10.1.0",
+    "@netlify/functions": "5.3.0",
+    "csv-parse": "7.0.1",
+    "gtfs-realtime-bindings": "2.1.0",
+    "jose": "6.2.3",
+    "unzipper": "0.12.5"
+  },
+  "devDependencies": {
+    "vite": "8.1.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

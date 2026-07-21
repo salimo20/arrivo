@@ -1,0 +1,18 @@
+{
+  "generatedAt": "demo",
+  "source": "placeholder",
+  "agencies": {},
+  "routes": {
+    "demo-e1": { "shortName": "E1", "longName": "Northwood - Ballywaltrim", "agencyName": "Dublin Bus" },
+    "demo-7": { "shortName": "7", "longName": "City Centre - Brides Glen", "agencyName": "Dublin Bus" },
+    "demo-46a": { "shortName": "46A", "longName": "Phoenix Park - Dún Laoghaire", "agencyName": "Dublin Bus" }
+  },
+  "trips": {
+    "demo-trip-e1": { "routeId": "demo-e1", "headsign": "Northwood", "directionId": "0" },
+    "demo-trip-7": { "routeId": "demo-7", "headsign": "Brides Glen", "directionId": "0" },
+    "demo-trip-46a": { "routeId": "demo-46a", "headsign": "Dún Laoghaire", "directionId": "1" }
+  },
+  "stopsByCode": {
+    "9999": { "ids": ["demo-stop"], "name": "Eglington Road (Demo)", "lat": 53.322, "lon": -6.236 }
+  }
+}

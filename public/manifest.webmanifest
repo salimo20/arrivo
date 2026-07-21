@@ -1,0 +1,17 @@
+{
+  "name": "Dublin Bus Live Board",
+  "short_name": "Bus Board",
+  "description": "Simple real-time arrivals by bus stop number.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#071d49",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
