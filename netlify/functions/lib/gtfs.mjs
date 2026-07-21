@@ -78,11 +78,12 @@ function scheduledTimeFor(index, tripId, stopUpdate) {
   const tripTimes = index.scheduledStopTimes?.[tripId];
   if (!tripTimes) return null;
   const sequence = toNumber(stopUpdate.stopSequence);
-  if (sequence != null && tripTimes[String(sequence)]) return tripTimes[String(sequence)][1];
   const stopId = String(stopUpdate.stopId || '');
-  if (!stopId) return null;
-  const match = Object.values(tripTimes).find(([candidateStopId]) => candidateStopId === stopId);
-  return match?.[1] ?? null;
+  for (let indexPosition = 0; indexPosition < tripTimes.length; indexPosition += 3) {
+    if (sequence != null && tripTimes[indexPosition] === sequence) return tripTimes[indexPosition + 2];
+    if (sequence == null && stopId && tripTimes[indexPosition + 1] === stopId) return tripTimes[indexPosition + 2];
+  }
+  return null;
 }
 
 export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.now() / 1000)) {

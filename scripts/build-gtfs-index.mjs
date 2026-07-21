@@ -1,5 +1,6 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { parse } from 'csv-parse/sync';
+import { parse as parseStream } from 'csv-parse';
 import unzipper from 'unzipper';
 
 const outputPath = new URL('../netlify/functions/data/gtfs-index.json', import.meta.url);
@@ -16,9 +17,14 @@ const allowedAgencyNames = (process.env.ALLOWED_AGENCY_NAMES ?? 'Bus Átha Cliat
   .filter(Boolean);
 
 function csvFile(directory, filename) {
+  const entry = csvEntry(directory, filename);
+  return entry.buffer().then((buffer) => parse(buffer, { columns: true, skip_empty_lines: true, bom: true, relax_column_count: true }));
+}
+
+function csvEntry(directory, filename) {
   const entry = directory.files.find((file) => file.path.toLowerCase().endsWith(filename.toLowerCase()));
   if (!entry) throw new Error(`${filename} is missing from the GTFS ZIP.`);
-  return entry.buffer().then((buffer) => parse(buffer, { columns: true, skip_empty_lines: true, bom: true, relax_column_count: true }));
+  return entry;
 }
 
 function allowedAgency(name) {
@@ -32,12 +38,11 @@ const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(120_000) }
 if (!response.ok) throw new Error(`GTFS download failed with HTTP ${response.status}.`);
 
 const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()));
-const [agencyRows, routeRows, tripRows, stopRows, stopTimeRows] = await Promise.all([
+const [agencyRows, routeRows, tripRows, stopRows] = await Promise.all([
   csvFile(archive, 'agency.txt'),
   csvFile(archive, 'routes.txt'),
   csvFile(archive, 'trips.txt'),
-  csvFile(archive, 'stops.txt'),
-  csvFile(archive, 'stop_times.txt')
+  csvFile(archive, 'stops.txt')
 ]);
 
 const agencies = Object.fromEntries(agencyRows.map((row) => [row.agency_id || 'default', row.agency_name || '']));
@@ -71,14 +76,20 @@ function timeToSeconds(value) {
 
 const scheduledStopTimes = {};
 let scheduledStopTimeCount = 0;
-for (const row of stopTimeRows) {
+const stopTimeParser = csvEntry(archive, 'stop_times.txt').stream().pipe(parseStream({
+  columns: true,
+  skip_empty_lines: true,
+  bom: true,
+  relax_column_count: true
+}));
+for await (const row of stopTimeParser) {
   const tripId = String(row.trip_id || '').trim();
   if (!trips[tripId]) continue;
-  const sequence = String(row.stop_sequence || '').trim();
+  const sequence = Number(row.stop_sequence);
   const stopId = String(row.stop_id || '').trim();
   const seconds = timeToSeconds(row.arrival_time || row.departure_time);
-  if (!sequence || !stopId || seconds == null) continue;
-  (scheduledStopTimes[tripId] ||= {})[sequence] = [stopId, seconds];
+  if (!Number.isFinite(sequence) || !stopId || seconds == null) continue;
+  (scheduledStopTimes[tripId] ||= []).push(sequence, stopId, seconds);
   scheduledStopTimeCount += 1;
 }
 
