@@ -48,24 +48,57 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
   const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buffer));
   const arrivals = [];
   const horizon = nowSeconds + 3 * 60 * 60;
+  const diagnostics = {
+    entities: (feed.entity || []).length,
+    tripUpdates: 0,
+    missingTripDescriptor: 0,
+    missingRouteId: 0,
+    matchedRoutes: 0,
+    unmatchedRoutes: 0,
+    stopUpdates: 0,
+    missingEta: 0,
+    outsideWindow: 0,
+    accepted: 0
+  };
 
   for (const entity of feed.entity || []) {
     const update = entity.tripUpdate;
-    if (!update?.trip) continue;
+    if (!update) continue;
+    diagnostics.tripUpdates += 1;
+    if (!update.trip) {
+      diagnostics.missingTripDescriptor += 1;
+      continue;
+    }
 
     const tripId = update.trip.tripId || '';
     const tripMeta = index.trips[tripId] || {};
     const routeId = update.trip.routeId || tripMeta.routeId || '';
+    if (!routeId) {
+      diagnostics.missingRouteId += 1;
+      continue;
+    }
     const routeMeta = index.routes[routeId];
-    if (!routeMeta) continue;
+    if (!routeMeta) {
+      diagnostics.unmatchedRoutes += 1;
+      continue;
+    }
+    diagnostics.matchedRoutes += 1;
     const tripRelationship = tripRelationshipName(update.trip.scheduleRelationship);
     const vehicleId = update.vehicle?.label || update.vehicle?.id || '';
 
     for (const stopUpdate of update.stopTimeUpdate || []) {
+      diagnostics.stopUpdates += 1;
       const arrivalTime = toNumber(stopUpdate.arrival?.time);
       const departureTime = toNumber(stopUpdate.departure?.time);
       const eta = arrivalTime ?? departureTime;
-      if (!eta || eta < nowSeconds - 60 || eta > horizon) continue;
+      if (!eta) {
+        diagnostics.missingEta += 1;
+        continue;
+      }
+      if (eta < nowSeconds - 60 || eta > horizon) {
+        diagnostics.outsideWindow += 1;
+        continue;
+      }
 
       const delay = toNumber(stopUpdate.arrival?.delay) ?? toNumber(stopUpdate.departure?.delay) ?? 0;
       const stopRelationship = relationshipName(stopUpdate.scheduleRelationship);
@@ -83,13 +116,15 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
         stopRelationship,
         vehicleId
       });
+      diagnostics.accepted += 1;
     }
   }
 
   return {
     generatedAt: new Date().toISOString(),
     feedTimestamp: toNumber(feed.header?.timestamp),
-    arrivals
+    arrivals,
+    diagnostics
   };
 }
 

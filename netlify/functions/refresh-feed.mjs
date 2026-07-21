@@ -90,6 +90,9 @@ export default async () => {
       return;
     }
     console.log(`Cached ${result.arrivals.length} arrival records at ${result.generatedAt}.`);
+    if (result.diagnostics) {
+      console.log(`Feed diagnostics: ${JSON.stringify(result.diagnostics)}`);
+    }
   } catch (error) {
     console.error('Realtime refresh failed:', error);
     throw error;
