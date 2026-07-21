@@ -44,6 +44,47 @@ function tripRelationshipName(value) {
   return names[value] || 'SCHEDULED';
 }
 
+const dublinParts = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Dublin',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23'
+});
+
+function dublinOffsetMilliseconds(epochMilliseconds) {
+  const parts = Object.fromEntries(
+    dublinParts.formatToParts(new Date(epochMilliseconds))
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, Number(part.value)])
+  );
+  const representedAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return representedAsUtc - epochMilliseconds;
+}
+
+function scheduledEpochSeconds(startDate, secondsAfterMidnight) {
+  const match = /^(\d{4})(\d{2})(\d{2})$/.exec(String(startDate || ''));
+  if (!match || !Number.isFinite(secondsAfterMidnight)) return null;
+  const wallClockUtc = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) + secondsAfterMidnight * 1000;
+  let epoch = wallClockUtc - dublinOffsetMilliseconds(wallClockUtc);
+  epoch = wallClockUtc - dublinOffsetMilliseconds(epoch);
+  return Math.floor(epoch / 1000);
+}
+
+function scheduledTimeFor(index, tripId, stopUpdate) {
+  const tripTimes = index.scheduledStopTimes?.[tripId];
+  if (!tripTimes) return null;
+  const sequence = toNumber(stopUpdate.stopSequence);
+  if (sequence != null && tripTimes[String(sequence)]) return tripTimes[String(sequence)][1];
+  const stopId = String(stopUpdate.stopId || '');
+  if (!stopId) return null;
+  const match = Object.values(tripTimes).find(([candidateStopId]) => candidateStopId === stopId);
+  return match?.[1] ?? null;
+}
+
 export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.now() / 1000)) {
   const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buffer));
   const arrivals = [];
@@ -57,6 +98,8 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
     unmatchedRoutes: 0,
     stopUpdates: 0,
     missingEta: 0,
+    missingScheduledTime: 0,
+    reconstructedEta: 0,
     outsideWindow: 0,
     accepted: 0
   };
@@ -90,7 +133,18 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
       diagnostics.stopUpdates += 1;
       const arrivalTime = toNumber(stopUpdate.arrival?.time);
       const departureTime = toNumber(stopUpdate.departure?.time);
-      const eta = arrivalTime ?? departureTime;
+      const delay = toNumber(stopUpdate.arrival?.delay) ?? toNumber(stopUpdate.departure?.delay) ?? 0;
+      let eta = arrivalTime ?? departureTime;
+      if (!eta) {
+        const scheduledSeconds = scheduledTimeFor(index, tripId, stopUpdate);
+        const scheduledEpoch = scheduledEpochSeconds(update.trip.startDate, scheduledSeconds);
+        if (scheduledEpoch != null) {
+          eta = scheduledEpoch + delay;
+          diagnostics.reconstructedEta += 1;
+        } else {
+          diagnostics.missingScheduledTime += 1;
+        }
+      }
       if (!eta) {
         diagnostics.missingEta += 1;
         continue;
@@ -100,7 +154,6 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
         continue;
       }
 
-      const delay = toNumber(stopUpdate.arrival?.delay) ?? toNumber(stopUpdate.departure?.delay) ?? 0;
       const stopRelationship = relationshipName(stopUpdate.scheduleRelationship);
 
       arrivals.push({

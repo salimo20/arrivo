@@ -32,11 +32,12 @@ const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(120_000) }
 if (!response.ok) throw new Error(`GTFS download failed with HTTP ${response.status}.`);
 
 const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()));
-const [agencyRows, routeRows, tripRows, stopRows] = await Promise.all([
+const [agencyRows, routeRows, tripRows, stopRows, stopTimeRows] = await Promise.all([
   csvFile(archive, 'agency.txt'),
   csvFile(archive, 'routes.txt'),
   csvFile(archive, 'trips.txt'),
-  csvFile(archive, 'stops.txt')
+  csvFile(archive, 'stops.txt'),
+  csvFile(archive, 'stop_times.txt')
 ]);
 
 const agencies = Object.fromEntries(agencyRows.map((row) => [row.agency_id || 'default', row.agency_name || '']));
@@ -60,6 +61,25 @@ for (const row of tripRows) {
     headsign: row.trip_headsign || '',
     directionId: row.direction_id || ''
   };
+}
+
+function timeToSeconds(value) {
+  const match = /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+}
+
+const scheduledStopTimes = {};
+let scheduledStopTimeCount = 0;
+for (const row of stopTimeRows) {
+  const tripId = String(row.trip_id || '').trim();
+  if (!trips[tripId]) continue;
+  const sequence = String(row.stop_sequence || '').trim();
+  const stopId = String(row.stop_id || '').trim();
+  const seconds = timeToSeconds(row.arrival_time || row.departure_time);
+  if (!sequence || !stopId || seconds == null) continue;
+  (scheduledStopTimes[tripId] ||= {})[sequence] = [stopId, seconds];
+  scheduledStopTimeCount += 1;
 }
 
 const stopsByCode = {};
@@ -89,11 +109,13 @@ const index = {
   agencies,
   routes,
   trips,
+  scheduledStopTimes,
   stopsByCode
 };
 
 await mkdir(new URL('../netlify/functions/data/', import.meta.url), { recursive: true });
 await writeFile(outputPath, JSON.stringify(index));
 console.log(`GTFS index ready: ${Object.keys(stopsByCode).length} stops, ${Object.keys(routes).length} routes, ${Object.keys(trips).length} trips.`);
+console.log(`Scheduled stop times indexed: ${scheduledStopTimeCount}.`);
 if (allowedAgencyNames.length) console.log(`Agency filter: ${allowedAgencyNames.join(', ')}`);
 else console.log(`Agencies found: ${[...new Set(Object.values(agencies))].filter(Boolean).join(' | ')}`);
