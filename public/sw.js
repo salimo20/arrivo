@@ -1,4 +1,4 @@
-const CACHE = 'dublin-bus-live-board-v2';
+const CACHE = 'arrivo-mobile-v1';
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (event) => {
