@@ -12,6 +12,24 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:20px;co
 @media(max-width:390px){.brand small{display:none}.hero-card{padding:26px 16px}.arrival-row{grid-template-columns:55px minmax(0,1fr) auto;padding-left:9px;padding-right:9px}.route-badge{width:49px}.destination strong{font-size:.86rem}.destination span{display:none}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 
+/* Compact TFI-style departure rows */
+.board-header,.arrival-row{grid-template-columns:86px minmax(0,1fr) 164px}
+.board-header{min-height:34px;padding:0 18px;color:#71869a;font-size:.56rem;letter-spacing:.16em}
+.board-header span:last-child{text-align:right}
+.arrival-row{min-height:76px;padding:10px 18px;border-bottom-color:rgba(173,218,255,.11)}
+.route-badge{width:58px;height:44px;border-color:rgba(255,212,0,.5);border-radius:7px;background:#11170e;font-size:1.2rem}
+.destination{padding-right:12px}
+.destination strong{font-size:1.03rem}
+.destination span{margin-top:3px;font-size:.68rem}
+.arrival-time{display:grid;grid-template-columns:minmax(76px,auto) 64px;align-items:center;justify-content:end;gap:9px}
+.flip-display{width:auto;min-width:76px;height:44px;padding:0 9px;border-color:#2d3d48;border-radius:5px;background:#090d0d;align-items:baseline}
+.flip-display:after{background:rgba(255,255,255,.035);box-shadow:none}
+.flip-value{font-size:1.65rem}
+.flip-display small{color:#c3b957;font-size:.5rem;font-weight:700;letter-spacing:.08em}
+.flip-display.cancelled{width:auto;min-width:100px}
+.flip-display.cancelled .flip-value{font-size:.68rem}
+.status{min-width:0;font-size:.58rem;white-space:nowrap}
+
 /* Compact, departures-first layout */
 .hero-card{grid-template-columns:minmax(0,1fr) minmax(340px,.8fr);gap:clamp(24px,5vw,56px);padding:clamp(22px,3vw,34px);min-height:160px;border-radius:24px;box-shadow:0 24px 60px rgba(0,0,0,.22)}
 .hero-copy h1{font-size:clamp(1.8rem,3.5vw,3rem);line-height:1.05;letter-spacing:-.045em}
@@ -56,4 +74,29 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:20px;co
   .stop-heading h2{font-size:1.35rem}
   .arrival-row{min-height:92px;padding-top:12px;padding-bottom:12px}
   .later-toggle{min-height:62px}
+}
+
+/* Keep the compact departure geometry after the general mobile layout. */
+@media(max-width:760px){
+  .board-shell{border-radius:15px}
+  .board-status{height:42px;padding:0 12px}
+  .arrival-row{grid-template-columns:52px minmax(0,1fr) 126px;min-height:68px;padding:8px 10px;gap:7px}
+  .route-badge{width:45px;height:39px;border-radius:6px;font-size:1rem}
+  .destination strong{font-size:.9rem}
+  .destination span{font-size:.59rem;margin-top:3px}
+  .arrival-time{display:grid;grid-template-columns:minmax(68px,auto) 51px;gap:5px;text-align:right}
+  .flip-display{width:auto;min-width:68px;height:40px;padding:0 6px;margin-left:0}
+  .flip-value{font-size:1.42rem}
+  .flip-display.cancelled{width:auto;min-width:80px}
+  .flip-display.cancelled .flip-value{font-size:.52rem}
+  .status{display:block;margin-top:0;font-size:.5rem}
+}
+@media(max-width:390px){
+  .arrival-row{grid-template-columns:47px minmax(0,1fr) 112px;padding-left:8px;padding-right:8px;gap:5px}
+  .route-badge{width:41px}
+  .destination strong{font-size:.82rem}
+  .destination span{display:none}
+  .arrival-time{grid-template-columns:minmax(64px,auto) 43px;gap:4px}
+  .flip-display{min-width:64px}
+  .status{font-size:.46rem}
 }

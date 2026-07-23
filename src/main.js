@@ -61,7 +61,7 @@ function render() {
             </div>
             <div class="board-shell">
               <div class="board-status"><span><i></i> LIVE + SCHEDULED DEPARTURES</span><time>${formatTime(state.data.refreshedAt)}</time></div>
-              <div class="board-header" aria-hidden="true"><span>ROUTE</span><span>DESTINATION</span><span>ARRIVAL</span></div>
+              <div class="board-header" aria-hidden="true"><span>ROUTE</span><span>DESTINATION</span><span>DUE</span></div>
               <div class="arrival-board">
                 ${arrivals.length ? visibleArrivals.map(arrivalRow).join('') : `<div class="empty-state"><strong>No live buses for this selection.</strong><span>Choose ALL or check again after the next refresh.</span></div>`}
               </div>
@@ -123,9 +123,10 @@ function arrivalRow(item) {
   const cancelled = item.status === 'Cancelled';
   const minuteText = cancelled ? 'CANCELLED' : item.minutes === 0 ? 'DUE' : String(item.minutes).padStart(2, '0');
   const unit = cancelled || item.minutes === 0 ? '' : 'MIN';
-  return `<article class="arrival-row">
+  const vehicle = item.vehicleId ? `Bus ${escapeHtml(item.vehicleId)}` : '';
+  return `<article class="arrival-row" aria-label="${escapeHtml(item.route)} to ${escapeHtml(item.destination)}, ${cancelled ? 'cancelled' : item.minutes === 0 ? 'due now' : `${item.minutes} minutes`}">
     <div class="route-badge">${escapeHtml(item.route)}</div>
-    <div class="destination"><strong>${escapeHtml(item.destination)}</strong><span>${escapeHtml(item.agencyName || 'Bus service')}${item.vehicleId ? ` &middot; Bus ${escapeHtml(item.vehicleId)}` : ''}</span></div>
+    <div class="destination"><strong>${escapeHtml(item.destination)}</strong><span>${vehicle || escapeHtml(item.agencyName || 'Bus service')}</span></div>
     <div class="arrival-time"><div class="flip-display ${cancelled ? 'cancelled' : ''}"><span class="flip-value">${minuteText}</span>${unit ? `<small>${unit}</small>` : ''}</div><span class="status status-${item.status.toLowerCase().replaceAll(' ', '-')}">${escapeHtml(item.status)}</span></div>
   </article>`;
 }
