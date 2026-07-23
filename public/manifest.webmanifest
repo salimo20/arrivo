@@ -1,11 +1,11 @@
 {
-  "name": "Dublin Bus Live Board",
-  "short_name": "Bus Board",
-  "description": "Simple real-time arrivals by bus stop number.",
+  "name": "Arrivo — Dublin Live Bus",
+  "short_name": "Arrivo",
+  "description": "Live Dublin bus arrivals from the stop number on the pole.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4f7fb",
-  "theme_color": "#071d49",
+  "background_color": "#06111f",
+  "theme_color": "#06111f",
   "icons": [
     {
       "src": "/icon.svg",
