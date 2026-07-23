@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs';
 import index from './data/gtfs-index.json' with { type: 'json' };
-import { filterArrivals } from './lib/gtfs.mjs';
+import { filterArrivals, scheduledArrivalsForStops } from './lib/gtfs.mjs';
 import { errorResponse, json, requireSession, verifySameOrigin } from './lib/security.mjs';
 import { refreshFeed } from './refresh-feed.mjs';
 
@@ -15,6 +15,21 @@ async function readCache() {
     cache = await refreshFeed();
   }
   return cache;
+}
+
+function combinedArrivals(cache, stopIds, routeFilter, limit) {
+  const wantedRoute = String(routeFilter || '').trim().toUpperCase();
+  const scheduled = scheduledArrivalsForStops(index, stopIds)
+    .filter((item) => !wantedRoute || String(item.route).toUpperCase() === wantedRoute);
+  const realtime = filterArrivals(cache, stopIds, routeFilter, 250);
+  const combined = new Map();
+
+  for (const item of scheduled) combined.set(`${item.tripId}|${item.stopId}`, item);
+  for (const item of realtime) combined.set(`${item.tripId}|${item.stopId}`, item);
+
+  return [...combined.values()]
+    .sort((a, b) => a.eta - b.eta)
+    .slice(0, limit);
 }
 
 export default async (request) => {
@@ -49,8 +64,8 @@ export default async (request) => {
       return json({ ok: false, error: 'Live data is temporarily stale. Please try again shortly.' }, 503);
     }
 
-    const arrivals = filterArrivals(cache, stop.ids, route, route ? 4 : 12);
-    const routes = [...new Set(filterArrivals(cache, stop.ids, '', 100).map((item) => item.route))]
+    const arrivals = combinedArrivals(cache, stop.ids, route, route ? 8 : 24);
+    const routes = [...new Set(combinedArrivals(cache, stop.ids, '', 250).map((item) => item.route))]
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
     return json({

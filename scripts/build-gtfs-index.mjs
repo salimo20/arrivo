@@ -38,11 +38,13 @@ const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(120_000) }
 if (!response.ok) throw new Error(`GTFS download failed with HTTP ${response.status}.`);
 
 const archive = await unzipper.Open.buffer(Buffer.from(await response.arrayBuffer()));
-const [agencyRows, routeRows, tripRows, stopRows] = await Promise.all([
+const [agencyRows, routeRows, tripRows, stopRows, calendarRows, calendarDateRows] = await Promise.all([
   csvFile(archive, 'agency.txt'),
   csvFile(archive, 'routes.txt'),
   csvFile(archive, 'trips.txt'),
-  csvFile(archive, 'stops.txt')
+  csvFile(archive, 'stops.txt'),
+  csvFile(archive, 'calendar.txt').catch(() => []),
+  csvFile(archive, 'calendar_dates.txt').catch(() => [])
 ]);
 
 const agencies = Object.fromEntries(agencyRows.map((row) => [row.agency_id || 'default', row.agency_name || '']));
@@ -59,12 +61,17 @@ for (const row of routeRows) {
 }
 
 const trips = {};
+const tripIdsByScheduleIndex = [];
 for (const row of tripRows) {
   if (!routes[row.route_id]) continue;
+  const scheduleIndex = tripIdsByScheduleIndex.length;
+  tripIdsByScheduleIndex.push(row.trip_id);
   trips[row.trip_id] = {
     routeId: row.route_id,
     headsign: row.trip_headsign || '',
-    directionId: row.direction_id || ''
+    directionId: row.direction_id || '',
+    serviceId: row.service_id || '',
+    scheduleIndex
   };
 }
 
@@ -74,7 +81,7 @@ function timeToSeconds(value) {
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
 }
 
-const scheduledStopTimes = {};
+const scheduledStopTimesByStop = {};
 let scheduledStopTimeCount = 0;
 const stopTimeParser = csvEntry(archive, 'stop_times.txt').stream().pipe(parseStream({
   columns: true,
@@ -89,8 +96,30 @@ for await (const row of stopTimeParser) {
   const stopId = String(row.stop_id || '').trim();
   const seconds = timeToSeconds(row.arrival_time || row.departure_time);
   if (!Number.isFinite(sequence) || !stopId || seconds == null) continue;
-  (scheduledStopTimes[tripId] ||= []).push(sequence, stopId, seconds);
+  (scheduledStopTimesByStop[stopId] ||= []).push(trips[tripId].scheduleIndex, sequence, seconds);
   scheduledStopTimeCount += 1;
+}
+
+const weekdayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const services = {};
+for (const row of calendarRows) {
+  const serviceId = String(row.service_id || '').trim();
+  if (!serviceId) continue;
+  let weekdayMask = 0;
+  weekdayNames.forEach((day, index) => {
+    if (String(row[day] || '') === '1') weekdayMask |= (1 << index);
+  });
+  services[serviceId] = [String(row.start_date || ''), String(row.end_date || ''), weekdayMask];
+}
+
+const serviceExceptions = {};
+for (const row of calendarDateRows) {
+  const serviceId = String(row.service_id || '').trim();
+  const date = String(row.date || '').trim();
+  const exceptionType = Number(row.exception_type);
+  if (!serviceId || !/^\d{8}$/.test(date) || ![1, 2].includes(exceptionType)) continue;
+  const entry = (serviceExceptions[date] ||= [[], []]);
+  entry[exceptionType === 1 ? 0 : 1].push(serviceId);
 }
 
 const stopsByCode = {};
@@ -120,7 +149,10 @@ const index = {
   agencies,
   routes,
   trips,
-  scheduledStopTimes,
+  tripIdsByScheduleIndex,
+  scheduledStopTimesByStop,
+  services,
+  serviceExceptions,
   stopsByCode
 };
 
