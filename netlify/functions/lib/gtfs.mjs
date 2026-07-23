@@ -86,10 +86,24 @@ function scheduledTimeFor(index, tripId, stopUpdate) {
   return null;
 }
 
+export function detectWholeHourClockCorrection(feedTimestamp, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const timestamp = toNumber(feedTimestamp);
+  if (timestamp == null) return 0;
+
+  const skewSeconds = timestamp - nowSeconds;
+  const wholeHours = Math.round(skewSeconds / 3600);
+  if (wholeHours === 0 || Math.abs(wholeHours) > 2) return 0;
+
+  const residualSeconds = Math.abs(skewSeconds - wholeHours * 3600);
+  return residualSeconds <= 15 * 60 ? -wholeHours * 3600 : 0;
+}
+
 export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.now() / 1000)) {
   const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buffer));
   const arrivals = [];
   const horizon = nowSeconds + 3 * 60 * 60;
+  const feedTimestamp = toNumber(feed.header?.timestamp);
+  const clockCorrectionSeconds = detectWholeHourClockCorrection(feedTimestamp, nowSeconds);
   const diagnostics = {
     entities: (feed.entity || []).length,
     tripUpdates: 0,
@@ -102,7 +116,8 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
     missingScheduledTime: 0,
     reconstructedEta: 0,
     outsideWindow: 0,
-    accepted: 0
+    accepted: 0,
+    clockCorrectionSeconds
   };
 
   for (const entity of feed.entity || []) {
@@ -136,6 +151,7 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
       const departureTime = toNumber(stopUpdate.departure?.time);
       const delay = toNumber(stopUpdate.arrival?.delay) ?? toNumber(stopUpdate.departure?.delay) ?? 0;
       let eta = arrivalTime ?? departureTime;
+      if (eta != null) eta += clockCorrectionSeconds;
       if (!eta) {
         const scheduledSeconds = scheduledTimeFor(index, tripId, stopUpdate);
         const scheduledEpoch = scheduledEpochSeconds(update.trip.startDate, scheduledSeconds);
@@ -176,7 +192,8 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
 
   return {
     generatedAt: new Date().toISOString(),
-    feedTimestamp: toNumber(feed.header?.timestamp),
+    feedTimestamp,
+    clockCorrectionSeconds,
     arrivals,
     diagnostics
   };

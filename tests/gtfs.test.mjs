@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterArrivals, statusFor, toNumber } from '../netlify/functions/lib/gtfs.mjs';
+import { detectWholeHourClockCorrection, filterArrivals, statusFor, toNumber } from '../netlify/functions/lib/gtfs.mjs';
 
 test('toNumber supports common protobuf representations', () => {
   assert.equal(toNumber(123), 123);
@@ -12,6 +12,14 @@ test('status labels delays and cancellations', () => {
   assert.equal(statusFor({ delay: 0, tripRelationship: 'SCHEDULED', stopRelationship: 'SCHEDULED' }), 'On time');
   assert.equal(statusFor({ delay: 240, tripRelationship: 'SCHEDULED', stopRelationship: 'SCHEDULED' }), 'Delayed');
   assert.equal(statusFor({ delay: 0, tripRelationship: 'CANCELED', stopRelationship: 'SCHEDULED' }), 'Cancelled');
+});
+
+test('corrects only a clear whole-hour feed clock skew', () => {
+  const now = 1_750_000_000;
+  assert.equal(detectWholeHourClockCorrection(now + 3600, now), -3600);
+  assert.equal(detectWholeHourClockCorrection(now - 3600, now), 3600);
+  assert.equal(detectWholeHourClockCorrection(now + 120, now), 0);
+  assert.equal(detectWholeHourClockCorrection(now + 5400, now), 0);
 });
 
 test('filterArrivals sorts, filters by stop and route, and limits results', () => {
