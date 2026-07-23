@@ -1,4 +1,4 @@
-const CACHE = 'arrivo-mobile-v1';
+const CACHE = 'arrivogo-mobile-v2';
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (event) => {

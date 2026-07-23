@@ -1,6 +1,6 @@
 {
-  "name": "Arrivo — Dublin Live Bus",
-  "short_name": "Arrivo",
+  "name": "ArrivoGo — Dublin Live Bus",
+  "short_name": "ArrivoGo",
   "description": "Live Dublin bus arrivals from the stop number on the pole.",
   "start_url": "/",
   "display": "standalone",
