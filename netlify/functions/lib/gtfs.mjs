@@ -98,6 +98,19 @@ export function detectWholeHourClockCorrection(feedTimestamp, nowSeconds = Math.
   return residualSeconds <= 15 * 60 ? -wholeHours * 3600 : 0;
 }
 
+export function detectEventClockCorrection(eta, scheduledEta) {
+  const realtime = toNumber(eta);
+  const scheduled = toNumber(scheduledEta);
+  if (realtime == null || scheduled == null) return 0;
+
+  const skewSeconds = realtime - scheduled;
+  const wholeHours = Math.round(skewSeconds / 3600);
+  if (wholeHours === 0 || Math.abs(wholeHours) > 2) return 0;
+
+  const residualSeconds = Math.abs(skewSeconds - wholeHours * 3600);
+  return residualSeconds <= 15 * 60 ? -wholeHours * 3600 : 0;
+}
+
 export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.now() / 1000)) {
   const feed = transit_realtime.FeedMessage.decode(new Uint8Array(buffer));
   const arrivals = [];
@@ -150,11 +163,15 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
       const arrivalTime = toNumber(stopUpdate.arrival?.time);
       const departureTime = toNumber(stopUpdate.departure?.time);
       const delay = toNumber(stopUpdate.arrival?.delay) ?? toNumber(stopUpdate.departure?.delay) ?? 0;
+      const scheduledSeconds = scheduledTimeFor(index, tripId, stopUpdate);
+      const scheduledEpoch = scheduledEpochSeconds(update.trip.startDate, scheduledSeconds);
       let eta = arrivalTime ?? departureTime;
-      if (eta != null) eta += clockCorrectionSeconds;
+      if (eta != null) {
+        const eventCorrection = detectEventClockCorrection(eta, scheduledEpoch == null ? null : scheduledEpoch + delay);
+        eta += eventCorrection || clockCorrectionSeconds;
+        if (eventCorrection) diagnostics.correctedEventTimestamps = (diagnostics.correctedEventTimestamps || 0) + 1;
+      }
       if (!eta) {
-        const scheduledSeconds = scheduledTimeFor(index, tripId, stopUpdate);
-        const scheduledEpoch = scheduledEpochSeconds(update.trip.startDate, scheduledSeconds);
         if (scheduledEpoch != null) {
           eta = scheduledEpoch + delay;
           diagnostics.reconstructedEta += 1;

@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectWholeHourClockCorrection, filterArrivals, statusFor, toNumber } from '../netlify/functions/lib/gtfs.mjs';
+import {
+  detectEventClockCorrection,
+  detectWholeHourClockCorrection,
+  filterArrivals,
+  statusFor,
+  toNumber
+} from '../netlify/functions/lib/gtfs.mjs';
 
 test('toNumber supports common protobuf representations', () => {
   assert.equal(toNumber(123), 123);
@@ -20,6 +26,14 @@ test('corrects only a clear whole-hour feed clock skew', () => {
   assert.equal(detectWholeHourClockCorrection(now - 3600, now), 3600);
   assert.equal(detectWholeHourClockCorrection(now + 120, now), 0);
   assert.equal(detectWholeHourClockCorrection(now + 5400, now), 0);
+});
+
+test('corrects a whole-hour event skew relative to its scheduled time and delay', () => {
+  const scheduledEta = 1_750_000_000;
+  assert.equal(detectEventClockCorrection(scheduledEta + 3600, scheduledEta), -3600);
+  assert.equal(detectEventClockCorrection(scheduledEta - 3600, scheduledEta), 3600);
+  assert.equal(detectEventClockCorrection(scheduledEta + 8 * 60, scheduledEta), 0);
+  assert.equal(detectEventClockCorrection(scheduledEta + 28 * 60, scheduledEta), 0);
 });
 
 test('filterArrivals sorts, filters by stop and route, and limits results', () => {
