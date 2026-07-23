@@ -34,6 +34,7 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:20px;co
 .later-toggle strong{font-size:.7rem;letter-spacing:.04em}
 .expand-arrow{width:28px;height:28px;display:grid;place-items:center;border:1px solid rgba(62,233,228,.35);border-radius:50%;color:var(--cyan);font-size:1rem}
 .board-footer{border-top:1px solid var(--line)}
+.status-scheduled{color:#9eb4c7}
 
 @media(max-width:760px){
   .topbar{margin-bottom:16px}

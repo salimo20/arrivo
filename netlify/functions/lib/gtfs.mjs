@@ -75,15 +75,107 @@ function scheduledEpochSeconds(startDate, secondsAfterMidnight) {
 }
 
 function scheduledTimeFor(index, tripId, stopUpdate) {
+  const tripIndex = index.trips?.[tripId]?.scheduleIndex;
+  const stopId = String(stopUpdate.stopId || '');
+  const byStop = index.scheduledStopTimesByStop?.[stopId];
+  const sequence = toNumber(stopUpdate.stopSequence);
+  if (tripIndex != null && byStop) {
+    for (let position = 0; position < byStop.length; position += 3) {
+      if (byStop[position] !== tripIndex) continue;
+      if (sequence == null || byStop[position + 1] === sequence) return byStop[position + 2];
+    }
+  }
+
+  // Backwards compatibility for the bundled development index.
   const tripTimes = index.scheduledStopTimes?.[tripId];
   if (!tripTimes) return null;
-  const sequence = toNumber(stopUpdate.stopSequence);
-  const stopId = String(stopUpdate.stopId || '');
   for (let indexPosition = 0; indexPosition < tripTimes.length; indexPosition += 3) {
     if (sequence != null && tripTimes[indexPosition] === sequence) return tripTimes[indexPosition + 2];
     if (sequence == null && stopId && tripTimes[indexPosition + 1] === stopId) return tripTimes[indexPosition + 2];
   }
   return null;
+}
+
+function dateKeyFromParts(parts) {
+  return `${String(parts.year).padStart(4, '0')}${String(parts.month).padStart(2, '0')}${String(parts.day).padStart(2, '0')}`;
+}
+
+function dublinDateParts(epochMilliseconds) {
+  const values = Object.fromEntries(
+    dublinParts.formatToParts(new Date(epochMilliseconds))
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, Number(part.value)])
+  );
+  return { year: values.year, month: values.month, day: values.day };
+}
+
+function nearbyServiceDates(nowMilliseconds) {
+  const current = dublinDateParts(nowMilliseconds);
+  const anchor = Date.UTC(current.year, current.month - 1, current.day, 12);
+  return [-1, 0, 1].map((offset) => {
+    const date = new Date(anchor + offset * 86_400_000);
+    const parts = { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+    const weekdayIndex = (date.getUTCDay() + 6) % 7;
+    return { dateKey: dateKeyFromParts(parts), weekdayIndex };
+  });
+}
+
+function activeServicesForDate(index, dateKey, weekdayIndex) {
+  const active = new Set();
+  for (const [serviceId, definition] of Object.entries(index.services || {})) {
+    const [startDate, endDate, weekdayMask] = definition;
+    if (dateKey >= startDate && dateKey <= endDate && (weekdayMask & (1 << weekdayIndex))) {
+      active.add(serviceId);
+    }
+  }
+  const [added = [], removed = []] = index.serviceExceptions?.[dateKey] || [];
+  added.forEach((serviceId) => active.add(serviceId));
+  removed.forEach((serviceId) => active.delete(serviceId));
+  return active;
+}
+
+export function scheduledArrivalsForStops(
+  index,
+  stopIds,
+  nowSeconds = Math.floor(Date.now() / 1000),
+  horizonSeconds = 3 * 60 * 60
+) {
+  if (!index.scheduledStopTimesByStop || !index.tripIdsByScheduleIndex) return [];
+  const horizon = nowSeconds + horizonSeconds;
+  const arrivals = [];
+
+  for (const { dateKey, weekdayIndex } of nearbyServiceDates(nowSeconds * 1000)) {
+    const activeServices = activeServicesForDate(index, dateKey, weekdayIndex);
+    for (const stopId of stopIds) {
+      const stopTimes = index.scheduledStopTimesByStop[stopId] || [];
+      for (let position = 0; position < stopTimes.length; position += 3) {
+        const tripId = index.tripIdsByScheduleIndex[stopTimes[position]];
+        const trip = index.trips?.[tripId];
+        if (!trip || !activeServices.has(trip.serviceId)) continue;
+        const eta = scheduledEpochSeconds(dateKey, stopTimes[position + 2]);
+        if (eta == null || eta < nowSeconds - 45 || eta > horizon) continue;
+        const route = index.routes?.[trip.routeId];
+        if (!route) continue;
+        arrivals.push({
+          tripId,
+          routeId: trip.routeId,
+          route: route.shortName || trip.routeId,
+          destination: trip.headsign || route.longName || 'Destination unavailable',
+          agencyName: route.agencyName || '',
+          stopId,
+          eta,
+          delay: 0,
+          tripRelationship: 'SCHEDULED',
+          stopRelationship: 'SCHEDULED',
+          vehicleId: '',
+          source: 'scheduled',
+          status: 'Scheduled',
+          minutes: Math.max(0, Math.ceil((eta - nowSeconds) / 60))
+        });
+      }
+    }
+  }
+  return arrivals.sort((a, b) => a.eta - b.eta);
 }
 
 export function detectWholeHourClockCorrection(feedTimestamp, nowSeconds = Math.floor(Date.now() / 1000)) {
@@ -238,6 +330,7 @@ export function filterArrivals(cache, stopIds, routeFilter, limit = 8, nowSecond
     if (!unique.has(key)) {
       unique.set(key, {
         ...item,
+        source: 'realtime',
         status: statusFor(item),
         minutes: Math.max(0, Math.ceil((item.eta - nowSeconds) / 60))
       });

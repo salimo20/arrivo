@@ -4,6 +4,7 @@ import {
   detectEventClockCorrection,
   detectWholeHourClockCorrection,
   filterArrivals,
+  scheduledArrivalsForStops,
   statusFor,
   toNumber
 } from '../netlify/functions/lib/gtfs.mjs';
@@ -50,4 +51,31 @@ test('filterArrivals sorts, filters by stop and route, and limits results', () =
   assert.equal(result[0].tripId, 'a');
   assert.equal(result[0].minutes, 5);
   assert.equal(result[0].status, 'Delayed');
+});
+
+test('scheduled fallback returns active Dublin service with a scheduled label', () => {
+  const now = Date.parse('2026-07-20T11:00:00Z') / 1000; // 12:00 in Dublin, Monday.
+  const index = {
+    routes: {
+      routeE1: { shortName: 'E1', longName: '', agencyName: 'Dublin Bus' }
+    },
+    trips: {
+      tripE1: { routeId: 'routeE1', headsign: 'Ballywaltrim', serviceId: 'weekday', scheduleIndex: 0 }
+    },
+    tripIdsByScheduleIndex: ['tripE1'],
+    scheduledStopTimesByStop: {
+      stop759: [0, 12, 12 * 3600 + 10 * 60]
+    },
+    services: {
+      weekday: ['20260101', '20261231', 31]
+    },
+    serviceExceptions: {}
+  };
+
+  const arrivals = scheduledArrivalsForStops(index, ['stop759'], now);
+  assert.equal(arrivals.length, 1);
+  assert.equal(arrivals[0].route, 'E1');
+  assert.equal(arrivals[0].destination, 'Ballywaltrim');
+  assert.equal(arrivals[0].minutes, 10);
+  assert.equal(arrivals[0].status, 'Scheduled');
 });

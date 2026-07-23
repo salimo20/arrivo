@@ -60,7 +60,7 @@ function render() {
               ${routes.map((route) => `<button class="route-chip ${state.route === route ? 'active' : ''}" data-route="${escapeHtml(route)}">${escapeHtml(route)}</button>`).join('')}
             </div>
             <div class="board-shell">
-              <div class="board-status"><span><i></i> ARRIVO LIVE DEPARTURES</span><time>${formatTime(state.data.refreshedAt)}</time></div>
+              <div class="board-status"><span><i></i> LIVE + SCHEDULED DEPARTURES</span><time>${formatTime(state.data.refreshedAt)}</time></div>
               <div class="board-header" aria-hidden="true"><span>ROUTE</span><span>DESTINATION</span><span>ARRIVAL</span></div>
               <div class="arrival-board">
                 ${arrivals.length ? visibleArrivals.map(arrivalRow).join('') : `<div class="empty-state"><strong>No live buses for this selection.</strong><span>Choose ALL or check again after the next refresh.</span></div>`}
