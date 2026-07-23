@@ -53,6 +53,10 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:20px;co
 .expand-arrow{width:28px;height:28px;display:grid;place-items:center;border:1px solid rgba(62,233,228,.35);border-radius:50%;color:var(--cyan);font-size:1rem}
 .board-footer{border-top:1px solid var(--line)}
 .status-scheduled{color:#9eb4c7}
+.install-help{position:relative;margin-top:16px;padding:20px 54px 20px 20px;border:1px solid rgba(255,212,0,.35);border-radius:18px;background:linear-gradient(135deg,#13253a,#091522);box-shadow:0 18px 44px rgba(0,0,0,.28)}
+.install-help h2{margin:0;font:600 1.15rem 'Space Grotesk'}
+.install-help p:last-child{margin:7px 0 0;color:#a9bbca;font-size:.84rem;line-height:1.5}
+.install-help button{position:absolute;top:13px;right:13px;width:34px;height:34px;border:1px solid var(--line);border-radius:50%;background:#091522;color:#dce8f0;font-size:1.35rem;line-height:1}
 
 @media(max-width:760px){
   .topbar{margin-bottom:16px}

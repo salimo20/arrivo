@@ -15,6 +15,7 @@ const state = {
   refreshIn: 60,
   timer: null,
   installPrompt: null,
+  showInstallHelp: false,
   showLater: false
 };
 
@@ -34,12 +35,12 @@ function render() {
     <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
     <div class="page-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Arrivo home">
+        <a class="brand" href="/" aria-label="ArrivoGo home">
           <img src="/icon.svg" alt="" width="48" height="48">
-          <span><strong>ARRIVO</strong><small>DUBLIN LIVE BUS</small></span>
+          <span><strong>ARRIVOGO</strong><small>DUBLIN LIVE BUS</small></span>
         </a>
         <div class="top-actions">
-          ${state.installPrompt ? '<button id="install-app" class="install-button">Install app</button>' : ''}
+          ${!isStandalone() ? '<button id="install-app" class="install-button">Install app</button>' : ''}
           <div class="live-pill"><i></i><span>LIVE</span></div>
         </div>
       </header>
@@ -48,6 +49,7 @@ function render() {
         ${hasResults ? activeStopBar() : searchHero()}
         ${state.verifying ? securityPanel() : ''}
         ${state.error ? `<div class="error-banner" role="alert"><strong>We could not load the board.</strong><span>${escapeHtml(state.error)}</span></div>` : ''}
+        ${state.showInstallHelp ? installHelp() : ''}
 
         ${hasResults ? `
           <section class="results" aria-live="polite">
@@ -75,7 +77,7 @@ function render() {
             </div>
           </section>` : ''}
       </main>
-      <footer><strong>ARRIVO</strong><span>Independent passenger app &middot; Live data supplied by the National Transport Authority.</span></footer>
+      <footer><strong>ARRIVOGO</strong><span>Independent passenger app &middot; Live data supplied by the National Transport Authority.</span></footer>
     </div>`;
   bindEvents();
 }
@@ -117,6 +119,24 @@ function activeStopBar() {
 
 function securityPanel() {
   return `<section class="security-panel" aria-live="polite"><div class="shield">&#10003;</div><div><strong>One quick security check</strong><p>This protects live arrivals. No account or password is needed.</p><div id="turnstile-container"></div></div></section>`;
+}
+
+function installHelp() {
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return `<section class="install-help" role="dialog" aria-modal="true" aria-labelledby="install-title">
+    <div>
+      <p class="eyebrow">INSTALL ARRIVOGO</p>
+      <h2 id="install-title">${isIos ? 'Add ArrivoGo to your Home Screen' : 'Install ArrivoGo on this phone'}</h2>
+      <p>${isIos
+        ? 'In Safari, tap the Share button, then choose “Add to Home Screen”.'
+        : 'Open your browser menu and choose “Install app” or “Add to Home screen”.'}</p>
+    </div>
+    <button id="close-install-help" type="button" aria-label="Close install instructions">&times;</button>
+  </section>`;
+}
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
 
 function arrivalRow(item) {
@@ -166,10 +186,18 @@ function bindEvents() {
   });
   document.querySelector('#manual-refresh')?.addEventListener('click', () => loadArrivals(false));
   document.querySelector('#install-app')?.addEventListener('click', async () => {
-    if (!state.installPrompt) return;
-    state.installPrompt.prompt();
-    await state.installPrompt.userChoice;
-    state.installPrompt = null;
+    if (state.installPrompt) {
+      state.installPrompt.prompt();
+      await state.installPrompt.userChoice;
+      state.installPrompt = null;
+      render();
+      return;
+    }
+    state.showInstallHelp = true;
+    render();
+  });
+  document.querySelector('#close-install-help')?.addEventListener('click', () => {
+    state.showInstallHelp = false;
     render();
   });
 }
