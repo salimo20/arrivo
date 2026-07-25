@@ -17,13 +17,62 @@ const modules = [
 function escapeHtml(value = '') { return String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
 
 function render() {
-  app.innerHTML = `<a class="skip-link" href="#main-content">Skip to main content</a><div class="site-shell">${header()}<main id="main-content">${state.view === 'live' ? liveView() : homeView()}</main>${footer()}</div>`;
+  app.innerHTML = `<a class="skip-link" href="#main-content">Skip to main content</a><div class="site-shell">${header()}<main id="main-content">${state.view === 'live' ? liveView() : homeDashboard()}</main>${footer()}</div>`;
   bindEvents();
 }
 
 function header() {
-  return `<header class="topbar"><a class="brand" href="#" data-view="home" aria-label="ArrivoGo home"><span class="brand-mark" aria-hidden="true"><span></span></span><span><strong>ARRIVO<span>GO</span></strong><small>DUBLIN, MADE SIMPLE</small></span></a><nav aria-label="Main navigation"><a href="#live" data-view="live">Live arrivals</a><a href="#guide">Plan a journey</a><a href="#platform">Our platform</a></nav><div class="top-actions">${state.installPrompt ? '<button id="install-app" class="install-button">Install app</button>' : ''}<span class="network-live"><i></i> DUBLIN LIVE</span><button class="menu-button" aria-label="Open live arrivals" data-view="live">GO</button></div></header>`;
+  return `<header class="topbar"><a class="brand" href="#" data-view="home" aria-label="ArrivoGo home"><span class="brand-mark" aria-hidden="true"><span></span></span><span><strong>ARRIVO<span>GO</span></strong><small>SMARTER JOURNEYS. BETTER DUBLIN.</small></span></a><nav aria-label="Main navigation"><a class="nav-active" href="#live" data-view="live">Live Arrivals</a><a href="#guide">Plan My Journey</a><a href="#features">Disruptions</a><a href="#features">Help</a><a href="#about">About</a></nav><div class="top-actions">${state.installPrompt ? '<button id="install-app" class="install-button">Install ArrivoGo</button>' : '<a class="install-button" href="#install">Install ArrivoGo</a>'}<button class="menu-button" aria-label="Open live arrivals" data-view="live">GO</button></div></header>`;
 }
+
+function homeDashboard() {
+  return `<section class="dash-shell">
+    <section class="dash-hero" aria-labelledby="dash-title">
+      <div class="dash-copy">
+        <p class="dash-live"><i></i> LIVE <span>Information operating normally</span></p>
+        <h1 id="dash-title">Dublin moves.<br>We make it <em>simple.</em></h1>
+        <p>Real-time bus times, smarter journeys and live updates to keep you moving with confidence.</p>
+        <div class="dash-actions">
+          <form id="home-stop-form" class="dash-action-card" novalidate>
+            <div class="dash-action-title"><span class="dash-icon">BUS</span><div><strong>Live Arrivals</strong><small>Enter a stop number</small></div></div>
+            <div class="dash-stop-input"><input id="home-stop-number" inputmode="numeric" maxlength="8" pattern="[0-9]*" placeholder="${demoMode ? '9999' : 'e.g. 773'}" value="${escapeHtml(state.stop)}" aria-label="Bus stop number" required><button type="submit" aria-label="Find live arrivals">→</button></div>
+          </form>
+          <a class="dash-action-card" href="#guide">
+            <div class="dash-action-title"><span class="dash-icon">GO</span><div><strong>Plan My Journey</strong><small>From my location to a destination</small></div></div>
+            <span class="dash-plan-button">Plan Now</span>
+          </a>
+        </div>
+      </div>
+      <div class="electric-badge"><span>⚡</span><div><strong>100% ELECTRIC</strong><small>Cleaner, quieter Dublin</small></div></div>
+    </section>
+    <section class="dash-feature-strip" id="features" aria-label="ArrivoGo tools">
+      ${dashFeature('S','StopSure','Find the correct stop every time')}
+      ${dashFeature('B','BusMatch','Board the right bus in the right direction')}
+      ${dashFeature('L','Live Tracking','See your bus in real time')}
+      ${dashFeature('P','Arrivo Pulse','Real-time disruptions and diversions')}
+      ${dashFeature('G','Arrivo Guardian','Your safety. Our priority.')}
+    </section>
+    <section class="dash-lower">
+      <article class="nearby-card">
+        <div class="dash-card-head"><div><span class="dash-icon small">⌁</span><span><strong>Live Around You</strong><small>O’Connell Street, Dublin 1</small></span></div><button data-view="live">View all stops →</button></div>
+        ${nearbyRow('38','O’Connell St, Eden Quay','Burlington Road','2 min')}
+        ${nearbyRow('123','O’Connell St, Parnell Square','Finglas','4 min')}
+        ${nearbyRow('46A','O’Connell St, Abbey St','Dún Laoghaire','7 min')}
+        <p class="nearby-update"><i></i> Example display · Open Live Arrivals for official data</p>
+      </article>
+      <article class="install-card" id="install">
+        <div><p>GET ARRIVOGO<br><em>ON YOUR PHONE</em></p><span>Install in seconds. Get live arrivals, plan your journey and more.</span></div>
+        <div class="phone-mock" aria-hidden="true"><strong>ArrivoGo</strong><small>38 to Burlington Road</small><b>3 stops remaining</b><div></div></div>
+        <button id="install-card-button" type="button">＋ Add to Home Screen</button>
+      </article>
+      <article class="about-card" id="about"><p>ABOUT ARRIVOGO</p><span>ArrivoGo is a driver-built Dublin transport platform created from real frontline experience helping passengers find the right service every day.</span><span>It makes live transport and journey planning clearer, faster and more dependable.</span><a href="#guide">Plan a journey →</a></article>
+    </section>
+  </section>${guidePanel()}`;
+}
+
+function dashFeature(icon,name,copy){return `<article><span class="feature-icon">${icon}</span><div><strong>${name}</strong><small>${copy}</small></div></article>`;}
+function nearbyRow(route,stop,destination,time){return `<div class="nearby-row"><span class="nearby-route">${route}</span><div><strong>${stop}</strong><small>Next service</small></div><span class="nearby-destination">${destination}</span><b>${time}</b><i>●</i></div>`;}
+function guidePanel(){return `<section class="guide-section" id="guide" aria-labelledby="guide-title"><div class="guide-heading"><div><p class="section-number">ARRIVO GUIDE</p><h2 id="guide-title">Never walk alone.<br><em>Never get lost.</em></h2></div><p>Tell us where you want to go. Compare clear Dublin transport choices by time, estimated cost, walking and changes.</p></div><form id="journey-form" class="planner-preview"><div class="planner-fields"><div><span class="field-dot start"></span><label for="journey-origin">FROM<input id="journey-origin" name="origin" placeholder="Current location, address or Eircode" value="Ballyogan Road" required></label></div><span class="field-line"></span><div><span class="field-dot finish"></span><label for="journey-destination">TO<input id="journey-destination" name="destination" placeholder="Where do you want to go?" value="Blanchardstown Shopping Centre" required></label></div></div><button type="submit" class="plan-button">Compare my options <b>→</b></button><fieldset class="planner-options"><legend>Choose what matters most</legend><label><input type="radio" name="preference" value="fastest" checked> ⚡ Fastest</label><label><input type="radio" name="preference" value="cheapest"> € Cheapest</label><label><input type="radio" name="preference" value="accessible"> ♿ Accessible</label><label><input type="radio" name="preference" value="walking"> ◌ Least walking</label></fieldset><p class="planner-notice">Foundation preview using controlled test journeys and indicative estimates. Live routing-provider integration comes next.</p></form>${state.journeyError?`<div class="journey-error" role="alert">${escapeHtml(state.journeyError)}</div>`:''}${state.journey?journeyResults(state.journey):''}</section>`;}
 
 function homeView() {
   return `<section class="hero" aria-labelledby="hero-title"><div class="hero-grid"><div class="hero-copy"><p class="kicker"><span></span> ONE CITY. EVERY WAY TO MOVE.</p><h1 id="hero-title">Every way around Dublin. <em>One simple app.</em></h1><p class="hero-intro">Compare buses, Luas, rail, walking and taxis in one journey—with live updates, clear directions and affordable choices.</p><div class="hero-actions"><button class="button primary" data-view="live">Check live departures <b>→</b></button><a class="button secondary" href="#guide">Plan my journey <b>↗</b></a></div><ul class="trust-list" aria-label="ArrivoGo benefits"><li><i>✓</i> Live NTA data</li><li><i>✓</i> Driver-built</li><li><i>✓</i> Made for everyone</li></ul></div><div class="network-card" aria-label="Example multimodal journey"><div class="map-grid" aria-hidden="true"></div><span class="map-label label-centre">CITY CENTRE</span><span class="map-label label-home">YOU</span><div class="route-line route-one"></div><div class="route-line route-two"></div><div class="map-node node-home">●</div><div class="map-node node-luas">L</div><div class="map-node node-city">◎</div><div class="journey-card"><div><span class="mode-icon">L</span><span><small>FASTEST ROUTE</small><strong>Green Line + Walk</strong></span></div><strong>28 <small>MIN</small></strong></div><div class="live-float"><i></i><span><small>NETWORK STATUS</small><strong>Services running normally</strong></span></div></div></div><div class="mode-strip" aria-label="Transport modes compared">${mode('BUS','Bus','Dublin Bus & Go-Ahead')}${mode('LUAS','Luas','Red & Green lines')}${mode('RAIL','Rail','DART & Commuter')}${mode('WALK','Walk','Door-to-door guidance')}${mode('TAXI','Taxi','Time & fare estimate')}</div></section>
@@ -60,6 +109,7 @@ function bindEvents() {
   document.querySelector('#toggle-later')?.addEventListener('click',()=>{state.showLater=!state.showLater;render();});
   document.querySelector('#manual-refresh')?.addEventListener('click',()=>loadArrivals(false));
   document.querySelector('#install-app')?.addEventListener('click',async()=>{state.installPrompt.prompt();await state.installPrompt.userChoice;state.installPrompt=null;render();});
+  document.querySelector('#install-card-button')?.addEventListener('click',async(event)=>{if(state.installPrompt){state.installPrompt.prompt();await state.installPrompt.userChoice;state.installPrompt=null;render();return;}event.currentTarget.textContent='Use browser menu → Add to Home Screen';});
 }
 function submitStop(){if(!/^\d{1,8}$/.test(state.stop)){state.error='Please enter the numeric stop number printed on the pole.';render();return;}state.route='';state.showLater=false;localStorage.setItem('lastStop',state.stop);loadArrivals();}
 async function loadArrivals(resetTimer=true){state.loading=true;state.error='';render();try{await ensureAuthenticated();const params=new URLSearchParams({stop:state.stop});if(state.route)params.set('route',state.route);let response=await fetch(`/api/arrivals?${params}`,{credentials:'same-origin'});if(response.status===401){state.authenticated=false;await ensureAuthenticated(true);response=await fetch(`/api/arrivals?${params}`,{credentials:'same-origin'});}const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||'The live service did not respond.');state.data=payload;state.refreshIn=60;if(resetTimer)startRefreshTimer();}catch(error){state.error=error.message||'Unexpected error.';}finally{state.loading=false;state.verifying=false;render();}}
