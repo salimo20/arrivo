@@ -161,6 +161,7 @@ export function scheduledArrivalsForStops(
           routeId: trip.routeId,
           route: route.shortName || trip.routeId,
           destination: trip.headsign || route.longName || 'Destination unavailable',
+          directionId: trip.directionId ?? '',
           agencyName: route.agencyName || '',
           stopId,
           eta,
@@ -170,7 +171,8 @@ export function scheduledArrivalsForStops(
           vehicleId: '',
           source: 'scheduled',
           status: 'Scheduled',
-          minutes: Math.max(0, Math.ceil((eta - nowSeconds) / 60))
+          displayMode: 'clock',
+          realtime: false
         });
       }
     }
@@ -287,6 +289,7 @@ export function decodeTripUpdates(buffer, index, nowSeconds = Math.floor(Date.no
         routeId,
         route: routeMeta.shortName || routeId || '—',
         destination: tripMeta.headsign || routeMeta.longName || 'Destination unavailable',
+        directionId: tripMeta.directionId ?? '',
         agencyName: routeMeta.agencyName || '',
         stopId: stopUpdate.stopId || '',
         eta,
@@ -331,6 +334,8 @@ export function filterArrivals(cache, stopIds, routeFilter, limit = 8, nowSecond
       unique.set(key, {
         ...item,
         source: 'realtime',
+        displayMode: 'countdown',
+        realtime: true,
         status: statusFor(item),
         minutes: Math.max(0, Math.ceil((item.eta - nowSeconds) / 60))
       });
@@ -338,4 +343,88 @@ export function filterArrivals(cache, stopIds, routeFilter, limit = 8, nowSecond
   }
 
   return [...unique.values()].sort((a, b) => a.eta - b.eta).slice(0, limit);
+}
+
+function normalizedText(value) {
+  return String(value || '').normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+    .replace(/\b(via|towards?|to)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function destinationsCompatible(left, right) {
+  const a = normalizedText(left);
+  const b = normalizedText(right);
+  if (!a || !b || a === 'destination unavailable' || b === 'destination unavailable') return true;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+function directionsCompatible(left, right) {
+  const a = String(left ?? '').trim();
+  const b = String(right ?? '').trim();
+  return !a || !b || a === b;
+}
+
+function sameRouteAndStop(realtime, scheduled) {
+  return String(realtime.route || '').toUpperCase() === String(scheduled.route || '').toUpperCase()
+    && String(realtime.stopId || '') === String(scheduled.stopId || '');
+}
+
+export function reconcileArrivals(
+  scheduled,
+  realtime,
+  { toleranceSeconds = 15 * 60, limit = 24 } = {}
+) {
+  const unmatchedScheduled = new Set(scheduled.map((_, position) => position));
+  const matchedScheduled = new Set();
+  const matchedRealtime = new Set();
+
+  for (let realtimePosition = 0; realtimePosition < realtime.length; realtimePosition += 1) {
+    const live = realtime[realtimePosition];
+    let match = scheduled.findIndex((item, position) =>
+      unmatchedScheduled.has(position) && live.tripId && item.tripId === live.tripId
+      && String(item.stopId || '') === String(live.stopId || '')
+    );
+
+    if (match < 0) {
+      let bestDifference = Number.POSITIVE_INFINITY;
+      for (const scheduledPosition of unmatchedScheduled) {
+        const timetable = scheduled[scheduledPosition];
+        const difference = Math.abs(Number(live.eta) - Number(timetable.eta));
+        if (!sameRouteAndStop(live, timetable)
+          || !directionsCompatible(live.directionId, timetable.directionId)
+          || !destinationsCompatible(live.destination, timetable.destination)
+          || !Number.isFinite(difference) || difference > toleranceSeconds
+          || difference >= bestDifference) continue;
+        match = scheduledPosition;
+        bestDifference = difference;
+      }
+    }
+
+    if (match >= 0) {
+      unmatchedScheduled.delete(match);
+      matchedScheduled.add(match);
+      matchedRealtime.add(realtimePosition);
+    }
+  }
+
+  const arrivals = [...realtime, ...[...unmatchedScheduled].map((position) => scheduled[position])]
+    .sort((a, b) => a.eta - b.eta).slice(0, limit);
+  const describe = (item) => ({
+    tripId: item.tripId || '', stopId: item.stopId || '', route: item.route || '',
+    destination: item.destination || '', directionId: item.directionId ?? '', eta: item.eta
+  });
+
+  return {
+    arrivals,
+    diagnostics: {
+      scheduledCount: scheduled.length,
+      realtimeCount: realtime.length,
+      matchedCount: matchedScheduled.size,
+      unmatchedScheduledCount: unmatchedScheduled.size,
+      unmatchedRealtimeCount: realtime.length - matchedRealtime.size,
+      unmatchedScheduled: [...unmatchedScheduled].slice(0, 25).map((position) => describe(scheduled[position])),
+      unmatchedRealtime: realtime.map((item, position) => ({ item, position }))
+        .filter(({ position }) => !matchedRealtime.has(position)).slice(0, 25)
+        .map(({ item }) => describe(item))
+    }
+  };
 }

@@ -4,6 +4,7 @@ import {
   detectEventClockCorrection,
   detectWholeHourClockCorrection,
   filterArrivals,
+  reconcileArrivals,
   scheduledArrivalsForStops,
   statusFor,
   toNumber
@@ -76,6 +77,47 @@ test('scheduled fallback returns active Dublin service with a scheduled label', 
   assert.equal(arrivals.length, 1);
   assert.equal(arrivals[0].route, 'E1');
   assert.equal(arrivals[0].destination, 'Ballywaltrim');
-  assert.equal(arrivals[0].minutes, 10);
+  assert.equal(arrivals[0].minutes, undefined);
   assert.equal(arrivals[0].status, 'Scheduled');
+  assert.equal(arrivals[0].displayMode, 'clock');
+  assert.equal(arrivals[0].realtime, false);
+});
+
+test('reconciliation replaces a scheduled trip with its exact realtime update', () => {
+  const scheduled = [{ tripId: 'static-trip', stopId: 'stop-773', route: 'E1', destination: 'Northwood', directionId: '0', eta: 10_000, source: 'scheduled' }];
+  const realtime = [{ tripId: 'static-trip', stopId: 'stop-773', route: 'E1', destination: 'Northwood', directionId: '0', eta: 10_240, source: 'realtime', minutes: 4 }];
+  const result = reconcileArrivals(scheduled, realtime);
+  assert.deepEqual(result.arrivals, realtime);
+  assert.equal(result.diagnostics.matchedCount, 1);
+  assert.equal(result.diagnostics.unmatchedScheduledCount, 0);
+});
+
+test('reconciliation tolerates changed trip IDs using route, stop, direction, destination, and time', () => {
+  const scheduled = [{ tripId: 'static-2026', stopId: 'stop-773', route: 'E1', destination: 'Northwood via City Centre', directionId: '0', eta: 20_000, source: 'scheduled' }];
+  const realtime = [{ tripId: 'realtime-4711', stopId: 'stop-773', route: 'e1', destination: 'Northwood', directionId: '0', eta: 20_360, source: 'realtime', minutes: 6 }];
+  const result = reconcileArrivals(scheduled, realtime, { toleranceSeconds: 600 });
+  assert.equal(result.arrivals.length, 1);
+  assert.equal(result.arrivals[0].source, 'realtime');
+  assert.equal(result.diagnostics.matchedCount, 1);
+});
+
+test('reconciliation keeps timetable-only rows clearly scheduled and reports unmatched records', () => {
+  const scheduled = [{ tripId: 'scheduled-e1', stopId: 'stop-773', route: 'E1', destination: 'Northwood', directionId: '0', eta: 30_000, source: 'scheduled', status: 'Scheduled', displayMode: 'clock', realtime: false }];
+  const realtime = [{ tripId: 'live-39a', stopId: 'stop-773', route: '39A', destination: 'Ongar', directionId: '1', eta: 29_900, source: 'realtime', displayMode: 'countdown', realtime: true, minutes: 2 }];
+  const result = reconcileArrivals(scheduled, realtime);
+  assert.equal(result.arrivals.length, 2);
+  assert.equal(result.arrivals[1].source, 'scheduled');
+  assert.equal(result.arrivals[1].minutes, undefined);
+  assert.equal(result.diagnostics.unmatchedScheduledCount, 1);
+  assert.equal(result.diagnostics.unmatchedRealtimeCount, 1);
+  assert.equal(result.diagnostics.unmatchedScheduled[0].route, 'E1');
+  assert.equal(result.diagnostics.unmatchedRealtime[0].route, '39A');
+});
+
+test('reconciliation does not match the wrong direction or a distant scheduled time', () => {
+  const scheduled = [{ tripId: 'scheduled-e1', stopId: 'stop-773', route: 'E1', destination: 'Northwood', directionId: '0', eta: 40_000, source: 'scheduled' }];
+  const wrongDirection = [{ tripId: 'different-live-id', stopId: 'stop-773', route: 'E1', destination: 'Northwood', directionId: '1', eta: 40_120, source: 'realtime' }];
+  const tooFarAway = [{ tripId: 'different-live-id', stopId: 'stop-773', route: 'E1', destination: 'Northwood', directionId: '0', eta: 42_000, source: 'realtime' }];
+  assert.equal(reconcileArrivals(scheduled, wrongDirection).arrivals.length, 2);
+  assert.equal(reconcileArrivals(scheduled, tooFarAway, { toleranceSeconds: 600 }).arrivals.length, 2);
 });

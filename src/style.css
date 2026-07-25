@@ -53,6 +53,12 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:20px;co
 .expand-arrow{width:28px;height:28px;display:grid;place-items:center;border:1px solid rgba(62,233,228,.35);border-radius:50%;color:var(--cyan);font-size:1rem}
 .board-footer{border-top:1px solid var(--line)}
 .status-scheduled{color:#9eb4c7}
+.arrival-scheduled{background:rgba(126,148,168,.035)}
+.arrival-scheduled .route-badge{border-color:rgba(158,180,199,.32);color:#c7d5e0;background:#101820}
+.scheduled-clock{min-width:88px;border-color:rgba(158,180,199,.35);background:#101820;box-shadow:none}
+.scheduled-clock .flip-value{color:#d7e2ea;font-size:1.15rem;letter-spacing:.01em;text-shadow:none}
+.scheduled-clock:after{display:none}
+.arrival-scheduled .destination span{color:#9eb4c7}
 
 @media(max-width:760px){
   .topbar{margin-bottom:16px}

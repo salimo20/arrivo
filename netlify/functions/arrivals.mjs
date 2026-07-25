@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs';
 import index from './data/gtfs-index.json' with { type: 'json' };
-import { filterArrivals, scheduledArrivalsForStops } from './lib/gtfs.mjs';
+import { filterArrivals, reconcileArrivals, scheduledArrivalsForStops } from './lib/gtfs.mjs';
 import { errorResponse, json, requireSession, verifySameOrigin } from './lib/security.mjs';
 import { refreshFeed } from './refresh-feed.mjs';
 
@@ -22,14 +22,7 @@ function combinedArrivals(cache, stopIds, routeFilter, limit) {
   const scheduled = scheduledArrivalsForStops(index, stopIds)
     .filter((item) => !wantedRoute || String(item.route).toUpperCase() === wantedRoute);
   const realtime = filterArrivals(cache, stopIds, routeFilter, 250);
-  const combined = new Map();
-
-  for (const item of scheduled) combined.set(`${item.tripId}|${item.stopId}`, item);
-  for (const item of realtime) combined.set(`${item.tripId}|${item.stopId}`, item);
-
-  return [...combined.values()]
-    .sort((a, b) => a.eta - b.eta)
-    .slice(0, limit);
+  return reconcileArrivals(scheduled, realtime, { limit });
 }
 
 export default async (request) => {
@@ -64,16 +57,23 @@ export default async (request) => {
       return json({ ok: false, error: 'Live data is temporarily stale. Please try again shortly.' }, 503);
     }
 
-    const arrivals = combinedArrivals(cache, stop.ids, route, route ? 8 : 24);
-    const routes = [...new Set(combinedArrivals(cache, stop.ids, '', 250).map((item) => item.route))]
+    const result = combinedArrivals(cache, stop.ids, route, route ? 8 : 24);
+    const allRoutesResult = combinedArrivals(cache, stop.ids, '', 250);
+    const routes = [...new Set(allRoutesResult.arrivals.map((item) => item.route))]
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (result.diagnostics.unmatchedScheduledCount || result.diagnostics.unmatchedRealtimeCount) {
+      console.info('Arrival reconciliation diagnostics', {
+        stopCode, route: route || 'ALL', ...result.diagnostics
+      });
+    }
 
     return json({
       ok: true,
       stop: { code: stopCode, name: stop.name },
       route: route || null,
       routes,
-      arrivals,
+      arrivals: result.arrivals,
+      diagnostics: result.diagnostics,
       refreshedAt: cache.generatedAt,
       cacheAgeSeconds
     });
