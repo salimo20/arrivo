@@ -1,10 +1,10 @@
 import './style.css';
-import { planJourney } from './journey-planner.js';
+import { planJourney, selectJourney } from './journey-planner.js';
 
 const app = document.querySelector('#app');
 const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 const demoMode = import.meta.env.VITE_DEMO_MODE === 'true';
-const state = { view: 'home', stop: localStorage.getItem('lastStop') || '', route: '', data: null, loading: false, error: '', authenticated: false, verifying: false, refreshIn: 60, timer: null, installPrompt: null, showLater: false, journey: null, journeyError: '' };
+const state = { view: 'home', stop: localStorage.getItem('lastStop') || '', route: '', data: null, loading: false, error: '', authenticated: false, verifying: false, refreshIn: 60, timer: null, installPrompt: null, showLater: false, journey: null, itinerary: null, journeyError: '' };
 const modules = [
   ['A','Arrivo Guide','Compare bus, Luas, rail, walking and taxi options in one clear journey.','Journey planning','yellow'],
   ['S','StopSure','Confirm the right stop, platform and direction before you set off.','Direction confidence','cyan'],
@@ -84,7 +84,18 @@ function homeView() {
 
 function mode(code,name,detail) { return `<div class="mode"><span>${code}</span><div><strong>${name}</strong><small>${detail}</small></div></div>`; }
 function moduleCard([icon,name,copy,status,tone]) { return `<article class="module-card ${tone}"><span class="module-icon">${icon}</span><div><small>${status}</small><h3>${name}</h3><p>${copy}</p></div><span class="module-arrow" aria-hidden="true">↗</span></article>`; }
-function journeyResults(journey) { return `<section class="journey-results" aria-live="polite"><div class="journey-summary"><div><span>FROM</span><strong>${escapeHtml(journey.origin)}</strong></div><b>→</b><div><span>TO</span><strong>${escapeHtml(journey.destination)}</strong></div></div><div class="journey-options">${journey.options.map((option,index)=>`<article class="journey-option ${index===0?'recommended':''}">${index===0?'<span class="recommended-label">BEST MATCH</span>':''}<div class="option-head"><div><small>${escapeHtml(option.label)}</small><strong>${option.minutes} min</strong></div><div class="option-metrics"><span>${escapeHtml(option.cost)}</span><span>${option.walking} min walk</span><span>${option.changes} ${option.changes===1?'change':'changes'}</span></div></div><ol>${option.legs.map(leg=>`<li><span class="leg-mode">${escapeHtml(leg.mode)}</span><div><strong>${escapeHtml(leg.detail)}</strong><small>${leg.minutes} min</small></div></li>`).join('')}</ol><button type="button" class="select-journey">Choose this journey</button></article>`).join('')}</div></section>`; }
+function journeyResults(journey) { return `<section class="journey-results" aria-live="polite"><div class="journey-summary"><div><span>FROM</span><strong>${escapeHtml(journey.origin)}</strong></div><b>→</b><div><span>TO</span><strong>${escapeHtml(journey.destination)}</strong></div></div><div class="journey-quality ${journey.dataQuality}"><strong>${journey.knownJourney?'CONTROLLED TEST JOURNEY':'ILLUSTRATIVE OPTIONS'}</strong><span>${journey.knownJourney?'Prepared for product testing. Times remain estimates until live routing is connected.':'These options demonstrate the planner interface and are not live directions.'}</span></div><div class="journey-options">${journey.options.map((option,index)=>`<article class="journey-option ${index===0?'recommended':''}">${index===0?'<span class="recommended-label">BEST MATCH</span>':''}<div class="option-head"><div><small>${escapeHtml(option.label)}</small><strong>${option.minutes} min</strong></div><div class="option-metrics"><span>${escapeHtml(option.cost)}</span><span>${option.walking} min walk</span><span>${option.changes} ${option.changes===1?'change':'changes'}</span></div></div><ol>${option.legs.map(leg=>`<li><span class="leg-mode">${escapeHtml(leg.mode)}</span><div><strong>${escapeHtml(leg.detail)}</strong><small>${leg.minutes} min</small></div></li>`).join('')}</ol><button type="button" class="select-journey" data-option-id="${escapeHtml(option.id)}">Choose this journey</button></article>`).join('')}</div>${state.itinerary?itineraryPanel(state.itinerary):''}</section>`; }
+
+function itineraryPanel(itinerary) {
+  const option=itinerary.option;
+  return `<section class="itinerary-panel" id="chosen-journey" aria-labelledby="itinerary-title">
+    <div class="itinerary-head"><div><span>YOUR CHOSEN JOURNEY</span><h3 id="itinerary-title">${escapeHtml(option.label)}</h3></div><strong>${option.minutes} min</strong></div>
+    <div class="itinerary-route"><span>${escapeHtml(itinerary.origin)}</span><b>→</b><span>${escapeHtml(itinerary.destination)}</span></div>
+    <ol>${option.legs.map(leg=>`<li><span class="itinerary-number">${leg.index}</span><div><strong>${escapeHtml(leg.mode)}</strong><span>${escapeHtml(leg.detail)}</span><small>Starts +${leg.startsAfter} min · ${leg.minutes} min</small></div></li>`).join('')}</ol>
+    <div class="itinerary-note"><strong>Preview guidance</strong><span>Check official live departures before travelling. Live rerouting, fares and disruption handling are the next integration milestone.</span></div>
+    <button type="button" id="change-journey">Compare another option</button>
+  </section>`;
+}
 
 function liveView() {
   const hasResults = Boolean(state.data), routes = state.data?.routes || [], arrivals = state.data?.arrivals || [], visible = state.showLater ? arrivals : arrivals.slice(0,6), hidden = Math.max(0,arrivals.length-6);
@@ -102,7 +113,9 @@ function footer() { return `<footer><a class="brand footer-brand" href="#" data-
 function bindEvents() {
   document.querySelectorAll('[data-view]').forEach(control=>control.addEventListener('click',event=>{event.preventDefault();state.view=control.dataset.view;state.error='';render();window.scrollTo({top:0,behavior:'smooth'});}));
   document.querySelector('#home-stop-form')?.addEventListener('submit',event=>{event.preventDefault();state.stop=document.querySelector('#home-stop-number').value.trim();state.view='live';submitStop();});
-  document.querySelector('#journey-form')?.addEventListener('submit',event=>{event.preventDefault();const form=new FormData(event.currentTarget);try{state.journey=planJourney({origin:form.get('origin'),destination:form.get('destination'),preference:form.get('preference')});state.journeyError='';render();document.querySelector('.journey-results')?.scrollIntoView({behavior:'smooth',block:'start'});}catch(error){state.journey=null;state.journeyError=error.message;render();}});
+  document.querySelector('#journey-form')?.addEventListener('submit',event=>{event.preventDefault();const form=new FormData(event.currentTarget);try{state.journey=planJourney({origin:form.get('origin'),destination:form.get('destination'),preference:form.get('preference')});state.itinerary=null;state.journeyError='';render();document.querySelector('.journey-results')?.scrollIntoView({behavior:'smooth',block:'start'});}catch(error){state.journey=null;state.itinerary=null;state.journeyError=error.message;render();}});
+  document.querySelectorAll('.select-journey').forEach(button=>button.addEventListener('click',()=>{try{state.itinerary=selectJourney(state.journey,button.dataset.optionId);state.journeyError='';render();document.querySelector('#chosen-journey')?.scrollIntoView({behavior:'smooth',block:'start'});}catch(error){state.journeyError=error.message;render();}}));
+  document.querySelector('#change-journey')?.addEventListener('click',()=>{state.itinerary=null;render();document.querySelector('.journey-options')?.scrollIntoView({behavior:'smooth',block:'start'});});
   document.querySelector('#stop-form')?.addEventListener('submit',event=>{event.preventDefault();state.stop=document.querySelector('#stop-number').value.trim();submitStop();});
   document.querySelectorAll('[data-route]').forEach(button=>button.addEventListener('click',async()=>{state.route=button.dataset.route||'';state.showLater=false;await loadArrivals(false);}));
   document.querySelector('#change-stop')?.addEventListener('click',()=>{state.data=null;state.route='';state.showLater=false;state.error='';render();});
