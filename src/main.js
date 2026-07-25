@@ -60,8 +60,8 @@ function render() {
               ${routes.map((route) => `<button class="route-chip ${state.route === route ? 'active' : ''}" data-route="${escapeHtml(route)}">${escapeHtml(route)}</button>`).join('')}
             </div>
             <div class="board-shell">
-              <div class="board-status"><span><i></i> LIVE + SCHEDULED DEPARTURES</span><time>${formatTime(state.data.refreshedAt)}</time></div>
-              <div class="board-header" aria-hidden="true"><span>ROUTE</span><span>DESTINATION</span><span>DUE</span></div>
+              <div class="board-status"><span><i></i> LIVE + TIMETABLE DEPARTURES</span><time>${formatTime(state.data.refreshedAt)}</time></div>
+              <div class="board-header" aria-hidden="true"><span>ROUTE</span><span>DESTINATION</span><span>TIME</span></div>
               <div class="arrival-board">
                 ${arrivals.length ? visibleArrivals.map(arrivalRow).join('') : `<div class="empty-state"><strong>No live buses for this selection.</strong><span>Choose ALL or check again after the next refresh.</span></div>`}
               </div>
@@ -121,13 +121,18 @@ function securityPanel() {
 
 function arrivalRow(item) {
   const cancelled = item.status === 'Cancelled';
-  const minuteText = cancelled ? 'CANCELLED' : item.minutes === 0 ? 'DUE' : String(item.minutes).padStart(2, '0');
-  const unit = cancelled || item.minutes === 0 ? '' : 'MIN';
+  const isRealtime = item.source === 'realtime' && item.realtime !== false;
+  const scheduledTime = formatScheduledTime(item.eta);
+  const minuteText = cancelled ? 'CANCELLED' : isRealtime ? (item.minutes === 0 ? 'DUE' : String(item.minutes).padStart(2, '0')) : scheduledTime;
+  const unit = cancelled || !isRealtime || item.minutes === 0 ? '' : 'MIN';
+  const status = isRealtime ? item.status : 'Scheduled';
+  const spokenTime = cancelled ? 'cancelled' : isRealtime ? (item.minutes === 0 ? 'due now' : `${item.minutes} minutes`) : `scheduled at ${scheduledTime}, timetable only`;
   const vehicle = item.vehicleId ? `Bus ${escapeHtml(item.vehicleId)}` : '';
-  return `<article class="arrival-row" aria-label="${escapeHtml(item.route)} to ${escapeHtml(item.destination)}, ${cancelled ? 'cancelled' : item.minutes === 0 ? 'due now' : `${item.minutes} minutes`}">
+  const detail = isRealtime ? (vehicle || escapeHtml(item.agencyName || 'Live prediction')) : 'Timetable only · no live tracking';
+  return `<article class="arrival-row ${isRealtime ? 'arrival-live' : 'arrival-scheduled'}" aria-label="${escapeHtml(item.route)} to ${escapeHtml(item.destination)}, ${spokenTime}">
     <div class="route-badge">${escapeHtml(item.route)}</div>
-    <div class="destination"><strong>${escapeHtml(item.destination)}</strong><span>${vehicle || escapeHtml(item.agencyName || 'Bus service')}</span></div>
-    <div class="arrival-time"><div class="flip-display ${cancelled ? 'cancelled' : ''}"><span class="flip-value">${minuteText}</span>${unit ? `<small>${unit}</small>` : ''}</div><span class="status status-${item.status.toLowerCase().replaceAll(' ', '-')}">${escapeHtml(item.status)}</span></div>
+    <div class="destination"><strong>${escapeHtml(item.destination)}</strong><span>${detail}</span></div>
+    <div class="arrival-time"><div class="flip-display ${cancelled ? 'cancelled' : ''} ${isRealtime ? '' : 'scheduled-clock'}"><span class="flip-value">${minuteText}</span>${unit ? `<small>${unit}</small>` : ''}</div><span class="status status-${status.toLowerCase().replaceAll(' ', '-')}">${escapeHtml(status)}</span></div>
   </article>`;
 }
 
@@ -282,6 +287,17 @@ function formatTime(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return 'just now';
   return new Intl.DateTimeFormat('en-IE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(date);
+}
+
+function formatScheduledTime(epochSeconds) {
+  const date = new Date(Number(epochSeconds) * 1000);
+  if (Number.isNaN(date.getTime())) return '--:--';
+  return new Intl.DateTimeFormat('en-IE', {
+    timeZone: 'Europe/Dublin',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date);
 }
 
 window.addEventListener('beforeinstallprompt', (event) => {
