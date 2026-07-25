@@ -16,5 +16,31 @@ export function planJourney({origin,destination,preference='fastest'}){
   const options=structuredClone(knownJourney?BALLYOGAN_TO_BLANCHARDSTOWN:GENERIC_OPTIONS);
   const scoring={fastest:item=>item.minutes,cheapest:item=>Number(item.cost.match(/\d+/)?.[0]||999),walking:item=>item.walking,accessible:item=>(item.accessible?0:1000)+item.walking};
   options.sort((a,b)=>(scoring[preference]||scoring.fastest)(a)-(scoring[preference]||scoring.fastest)(b));
-  return {origin:String(origin).trim(),destination:String(destination).trim(),preference,knownJourney,options};
+  return {
+    origin:String(origin).trim(),
+    destination:String(destination).trim(),
+    preference,
+    knownJourney,
+    generatedAt:new Date().toISOString(),
+    dataQuality:knownJourney?'controlled-scenario':'illustrative',
+    options
+  };
+}
+
+export function selectJourney(journey, optionId){
+  const option=journey?.options?.find(item=>item.id===optionId);
+  if(!option) throw new Error('Choose a valid journey option.');
+  let elapsed=0;
+  const legs=option.legs.map((leg,index)=>{
+    const startsAfter=elapsed;
+    elapsed+=leg.minutes;
+    return {...leg,index:index+1,startsAfter,endsAfter:elapsed};
+  });
+  return {
+    origin:journey.origin,
+    destination:journey.destination,
+    dataQuality:journey.dataQuality,
+    selectedAt:new Date().toISOString(),
+    option:{...option,legs}
+  };
 }
