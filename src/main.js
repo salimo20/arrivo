@@ -1,10 +1,10 @@
 import './style.css';
-import { planJourney, selectJourney } from './journey-planner.js';
+import { selectJourney } from './journey-planner.js';
 
 const app = document.querySelector('#app');
 const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 const demoMode = import.meta.env.VITE_DEMO_MODE === 'true';
-const state = { view: 'home', stop: localStorage.getItem('lastStop') || '', route: '', data: null, loading: false, error: '', authenticated: false, verifying: false, refreshIn: 60, timer: null, installPrompt: null, showLater: false, journey: null, itinerary: null, journeyError: '' };
+const state = { view: 'home', stop: localStorage.getItem('lastStop') || '', route: '', data: null, loading: false, error: '', authenticated: false, verifying: false, refreshIn: 60, timer: null, installPrompt: null, showLater: false, journey: null, itinerary: null, journeyDraft: { origin:'Ballyogan Road', destination:'Blanchardstown Shopping Centre', preference:'fastest' }, journeyLoading: false, journeyError: '' };
 const modules = [
   ['A','Arrivo Guide','Compare bus, Luas, rail, walking and taxi options in one clear journey.','Journey planning','yellow'],
   ['S','StopSure','Confirm the right stop, platform and direction before you set off.','Direction confidence','cyan'],
@@ -72,7 +72,7 @@ function homeDashboard() {
 
 function dashFeature(icon,name,copy){return `<article><span class="feature-icon">${icon}</span><div><strong>${name}</strong><small>${copy}</small></div></article>`;}
 function nearbyRow(route,stop,destination,time){return `<div class="nearby-row"><span class="nearby-route">${route}</span><div><strong>${stop}</strong><small>Next service</small></div><span class="nearby-destination">${destination}</span><b>${time}</b><i>●</i></div>`;}
-function guidePanel(){return `<section class="guide-section" id="guide" aria-labelledby="guide-title"><div class="guide-heading"><div><p class="section-number">ARRIVO GUIDE</p><h2 id="guide-title">Never walk alone.<br><em>Never get lost.</em></h2></div><p>Tell us where you want to go. Compare clear Dublin transport choices by time, estimated cost, walking and changes.</p></div><form id="journey-form" class="planner-preview"><div class="planner-fields"><div><span class="field-dot start"></span><label for="journey-origin">FROM<input id="journey-origin" name="origin" placeholder="Current location, address or Eircode" value="Ballyogan Road" required></label></div><span class="field-line"></span><div><span class="field-dot finish"></span><label for="journey-destination">TO<input id="journey-destination" name="destination" placeholder="Where do you want to go?" value="Blanchardstown Shopping Centre" required></label></div></div><button type="submit" class="plan-button">Compare my options <b>→</b></button><fieldset class="planner-options"><legend>Choose what matters most</legend><label><input type="radio" name="preference" value="fastest" checked> ⚡ Fastest</label><label><input type="radio" name="preference" value="cheapest"> € Cheapest</label><label><input type="radio" name="preference" value="accessible"> ♿ Accessible</label><label><input type="radio" name="preference" value="walking"> ◌ Least walking</label></fieldset><p class="planner-notice">Foundation preview using controlled test journeys and indicative estimates. Live routing-provider integration comes next.</p></form>${state.journeyError?`<div class="journey-error" role="alert">${escapeHtml(state.journeyError)}</div>`:''}${state.journey?journeyResults(state.journey):''}</section>`;}
+function guidePanel(){const draft=state.journeyDraft;return `<section class="guide-section" id="guide" aria-labelledby="guide-title"><div class="guide-heading"><div><p class="section-number">ARRIVO GUIDE</p><h2 id="guide-title">Never walk alone.<br><em>Never get lost.</em></h2></div><p>Tell us where you want to go. Compare clear Dublin transport choices by time, estimated cost, walking and changes.</p></div><form id="journey-form" class="planner-preview"><div class="planner-fields"><div><span class="field-dot start"></span><label for="journey-origin">FROM<input id="journey-origin" name="origin" placeholder="Current location, address or Eircode" value="${escapeHtml(draft.origin)}" required></label></div><span class="field-line"></span><div><span class="field-dot finish"></span><label for="journey-destination">TO<input id="journey-destination" name="destination" placeholder="Where do you want to go?" value="${escapeHtml(draft.destination)}" required></label></div></div><button type="submit" class="plan-button" ${state.journeyLoading?'disabled':''}>${state.journeyLoading?'Comparing safely…':'Compare my options <b>→</b>'}</button><fieldset class="planner-options" ${state.journeyLoading?'disabled':''}><legend>Choose what matters most</legend><label><input type="radio" name="preference" value="fastest" ${draft.preference==='fastest'?'checked':''}> ⚡ Fastest</label><label><input type="radio" name="preference" value="cheapest" ${draft.preference==='cheapest'?'checked':''}> € Cheapest</label><label><input type="radio" name="preference" value="accessible" ${draft.preference==='accessible'?'checked':''}> ♿ Accessible</label><label><input type="radio" name="preference" value="walking" ${draft.preference==='walking'?'checked':''}> ◌ Least walking</label></fieldset><p class="planner-notice">Journey requests are validated by ArrivoGo’s secure server. Current options remain controlled estimates until a live routing provider is connected.</p></form>${state.journeyError?`<div class="journey-error" role="alert">${escapeHtml(state.journeyError)}</div>`:''}${state.journey?journeyResults(state.journey):''}</section>`;}
 
 function homeView() {
   return `<section class="hero" aria-labelledby="hero-title"><div class="hero-grid"><div class="hero-copy"><p class="kicker"><span></span> ONE CITY. EVERY WAY TO MOVE.</p><h1 id="hero-title">Every way around Dublin. <em>One simple app.</em></h1><p class="hero-intro">Compare buses, Luas, rail, walking and taxis in one journey—with live updates, clear directions and affordable choices.</p><div class="hero-actions"><button class="button primary" data-view="live">Check live departures <b>→</b></button><a class="button secondary" href="#guide">Plan my journey <b>↗</b></a></div><ul class="trust-list" aria-label="ArrivoGo benefits"><li><i>✓</i> Live NTA data</li><li><i>✓</i> Driver-built</li><li><i>✓</i> Made for everyone</li></ul></div><div class="network-card" aria-label="Example multimodal journey"><div class="map-grid" aria-hidden="true"></div><span class="map-label label-centre">CITY CENTRE</span><span class="map-label label-home">YOU</span><div class="route-line route-one"></div><div class="route-line route-two"></div><div class="map-node node-home">●</div><div class="map-node node-luas">L</div><div class="map-node node-city">◎</div><div class="journey-card"><div><span class="mode-icon">L</span><span><small>FASTEST ROUTE</small><strong>Green Line + Walk</strong></span></div><strong>28 <small>MIN</small></strong></div><div class="live-float"><i></i><span><small>NETWORK STATUS</small><strong>Services running normally</strong></span></div></div></div><div class="mode-strip" aria-label="Transport modes compared">${mode('BUS','Bus','Dublin Bus & Go-Ahead')}${mode('LUAS','Luas','Red & Green lines')}${mode('RAIL','Rail','DART & Commuter')}${mode('WALK','Walk','Door-to-door guidance')}${mode('TAXI','Taxi','Time & fare estimate')}</div></section>
@@ -110,10 +110,44 @@ function arrivalRow(item) {
 }
 function footer() { return `<footer><a class="brand footer-brand" href="#" data-view="home"><span class="brand-mark"><span></span></span><span><strong>ARRIVO<span>GO</span></strong><small>YOUR COMPLETE DUBLIN TRANSPORT COMPANION</small></span></a><p>Independent passenger platform · Live data supplied by the National Transport Authority.</p><p>© ${new Date().getFullYear()} ArrivoGo</p></footer>`; }
 
+async function requestJourneyPlan(form) {
+  state.journeyDraft={
+    origin:String(form.get('origin')||'').trim(),
+    destination:String(form.get('destination')||'').trim(),
+    preference:String(form.get('preference')||'fastest')
+  };
+  state.journeyLoading=true;
+  state.journeyError='';
+  state.itinerary=null;
+  render();
+  try{
+    const response=await fetch('/api/journey-plan',{
+      method:'POST',
+      credentials:'same-origin',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        origin:state.journeyDraft.origin,
+        destination:state.journeyDraft.destination,
+        preference:state.journeyDraft.preference
+      })
+    });
+    const payload=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(payload.error||'The journey planner did not respond.');
+    state.journey=payload.journey;
+  }catch(error){
+    state.journey=null;
+    state.journeyError=error.message||'The journey planner is temporarily unavailable.';
+  }finally{
+    state.journeyLoading=false;
+    render();
+    document.querySelector(state.journey?'.journey-results':'.journey-error')?.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+}
+
 function bindEvents() {
   document.querySelectorAll('[data-view]').forEach(control=>control.addEventListener('click',event=>{event.preventDefault();state.view=control.dataset.view;state.error='';render();window.scrollTo({top:0,behavior:'smooth'});}));
   document.querySelector('#home-stop-form')?.addEventListener('submit',event=>{event.preventDefault();state.stop=document.querySelector('#home-stop-number').value.trim();state.view='live';submitStop();});
-  document.querySelector('#journey-form')?.addEventListener('submit',event=>{event.preventDefault();const form=new FormData(event.currentTarget);try{state.journey=planJourney({origin:form.get('origin'),destination:form.get('destination'),preference:form.get('preference')});state.itinerary=null;state.journeyError='';render();document.querySelector('.journey-results')?.scrollIntoView({behavior:'smooth',block:'start'});}catch(error){state.journey=null;state.itinerary=null;state.journeyError=error.message;render();}});
+  document.querySelector('#journey-form')?.addEventListener('submit',event=>{event.preventDefault();requestJourneyPlan(new FormData(event.currentTarget));});
   document.querySelectorAll('.select-journey').forEach(button=>button.addEventListener('click',()=>{try{state.itinerary=selectJourney(state.journey,button.dataset.optionId);state.journeyError='';render();document.querySelector('#chosen-journey')?.scrollIntoView({behavior:'smooth',block:'start'});}catch(error){state.journeyError=error.message;render();}}));
   document.querySelector('#change-journey')?.addEventListener('click',()=>{state.itinerary=null;render();document.querySelector('.journey-options')?.scrollIntoView({behavior:'smooth',block:'start'});});
   document.querySelector('#stop-form')?.addEventListener('submit',event=>{event.preventDefault();state.stop=document.querySelector('#stop-number').value.trim();submitStop();});
