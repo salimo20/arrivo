@@ -171,8 +171,9 @@ export function scheduledArrivalsForStops(
           vehicleId: '',
           source: 'scheduled',
           status: 'Scheduled',
-          displayMode: 'clock',
-          realtime: false
+          displayMode: 'countdown',
+          realtime: false,
+          minutes: Math.max(0, Math.ceil((eta - nowSeconds) / 60))
         });
       }
     }
