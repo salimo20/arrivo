@@ -4,12 +4,17 @@ import { decodeTripUpdates } from './lib/gtfs.mjs';
 
 const CACHE_STORE = 'nta-realtime-cache';
 const CACHE_KEY = 'trip-updates';
+// Sensible defaults so only NTA_API_KEY must be configured on the host.
+const DEFAULT_TRIP_UPDATES_URL = 'https://api.nationaltransport.ie/gtfsr/v2/TripUpdates';
+const DEFAULT_API_HEADER = 'Ocp-Apim-Subscription-Key';
 const MINIMUM_NTA_INTERVAL_MS = 61_000;
 const MAX_WAIT_MS = 3_500;
 
 function assertEnvironment() {
   if (!process.env.NTA_API_KEY) throw new Error('NTA_API_KEY is missing.');
-  if (!process.env.NTA_TRIP_UPDATES_URL) throw new Error('NTA_TRIP_UPDATES_URL is missing.');
+}
+function tripUpdatesUrl() {
+  return process.env.NTA_TRIP_UPDATES_URL || DEFAULT_TRIP_UPDATES_URL;
 }
 
 function sleep(milliseconds) {
@@ -59,8 +64,8 @@ export async function refreshFeed() {
   if (interval.skipped) return { ...interval.previous, skipped: true };
 
   const requestedAt = new Date().toISOString();
-  const headerName = process.env.NTA_API_HEADER || 'x-api-key';
-  const response = await fetch(process.env.NTA_TRIP_UPDATES_URL, {
+  const headerName = process.env.NTA_API_HEADER || DEFAULT_API_HEADER;
+  const response = await fetch(tripUpdatesUrl(), {
     headers: {
       [headerName]: process.env.NTA_API_KEY,
       accept: 'application/x-protobuf, application/octet-stream'
@@ -68,7 +73,10 @@ export async function refreshFeed() {
     signal: AbortSignal.timeout(25_000)
   });
 
-  if (!response.ok) throw new Error(`NTA request failed with ${response.status}.`);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`NTA request failed with ${response.status}. ${detail.slice(0, 200)}`);
+  }
   const buffer = await response.arrayBuffer();
   const normalized = { requestedAt, ...decodeTripUpdates(buffer, index) };
 
@@ -89,12 +97,9 @@ export default async () => {
       console.log('Skipped duplicate refresh to respect the NTA 60-second token limit.');
       return;
     }
-    console.log(`Cached ${result.arrivals.length} arrival records at ${result.generatedAt}.`);
-    if (result.diagnostics) {
-      console.log(`Feed diagnostics: ${JSON.stringify(result.diagnostics)}`);
-    }
+    console.log(`Refreshed NTA feed: ${result.arrivals?.length ?? 0} arrivals.`);
   } catch (error) {
-    console.error('Realtime refresh failed:', error);
+    console.error('refresh-feed failed:', error.message);
     throw error;
   }
 };
