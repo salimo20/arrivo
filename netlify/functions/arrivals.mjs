@@ -47,14 +47,32 @@ export default async (request) => {
       return json({ ok: false, error: 'That stop number is not in the current NTA schedule.' }, 404);
     }
 
-    const cache = await readCache();
-    if (!cache) {
-      return json({ ok: false, error: 'Live data is starting. Try again after the next one-minute refresh.' }, 503);
+    let cache = await readCache();
+    let cacheAgeSeconds = cache ? Math.floor((Date.now() - Date.parse(cache.generatedAt)) / 1000) : Infinity;
+
+    // Self-heal: the every-minute background refresh can occasionally miss a beat
+    // (scheduled functions aren't guaranteed to fire exactly on time). Rather than
+    // show the user a "stale" error, refresh the feed on the spot when the cache is
+    // missing or older than 180s, then use the fresh data. The NTA 60s interval
+    // guard inside refreshFeed prevents this from hammering the feed.
+    if (!cache || !Number.isFinite(cacheAgeSeconds) || cacheAgeSeconds > 180) {
+      try {
+        const fresh = await refreshFeed();
+        if (fresh && fresh.generatedAt) {
+          cache = fresh;
+          cacheAgeSeconds = Math.floor((Date.now() - Date.parse(cache.generatedAt)) / 1000);
+        }
+      } catch (refreshError) {
+        console.error('Inline refresh failed:', refreshError && refreshError.message);
+      }
     }
 
-    const cacheAgeSeconds = Math.floor((Date.now() - Date.parse(cache.generatedAt)) / 1000);
-    if (!Number.isFinite(cacheAgeSeconds) || cacheAgeSeconds > 180) {
-      return json({ ok: false, error: 'Live data is temporarily stale. Please try again shortly.' }, 503);
+    if (!cache) {
+      return json({ ok: false, error: 'Live data is starting. Try again in a moment.' }, 503);
+    }
+    // Final safety net: only give up if, even after refreshing, data is very old.
+    if (!Number.isFinite(cacheAgeSeconds) || cacheAgeSeconds > 300) {
+      return json({ ok: false, error: 'Live data is temporarily unavailable. Please try again shortly.' }, 503);
     }
 
     const result = combinedArrivals(cache, stop.ids, route, route ? 8 : 24);
